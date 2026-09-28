@@ -21,7 +21,7 @@ describe('parseExtToBridgeLine', () => {
 });
 
 describe('OmpBridgeMapper', () => {
-  it('frames a turn and flushes assistant text before the tool call it precedes', () => {
+  it('frames a turn and sends each assistant message as soon as it ends', () => {
     const mapper = new OmpBridgeMapper();
 
     const start = mapper.map({ t: 'status', status: 'busy' });
@@ -29,23 +29,26 @@ describe('OmpBridgeMapper', () => {
     expect(start.envelopes.map((e) => e.ev.t)).toEqual(['turn-start']);
     const turn = start.envelopes[0].turn;
 
-    expect(mapper.map({ t: 'assistant', text: 'Checking.' }).envelopes).toEqual([]);
+    // Not held for the next tool call or the turn end: a turn stays open while
+    // omp background jobs run, and a reply must not wait for them.
+    const said = mapper.map({ t: 'assistant', text: 'Checking.' }).envelopes;
+    expect(said.map((e) => e.ev)).toEqual([{ t: 'text', text: 'Checking.' }]);
     const call = mapper.map({ t: 'tool_start', id: 'c1', name: 'bash', args: { command: 'ls' } }).envelopes;
     expect(call.map((e) => e.ev)).toEqual([
-      { t: 'text', text: 'Checking.' },
       expect.objectContaining({ t: 'tool-call-start', name: 'bash', args: { command: 'ls' } }),
     ]);
     const end = mapper.map({ t: 'tool_end', id: 'c1', name: 'bash', isError: false, output: 'a\nb' }).envelopes;
-    expect(end[0].ev).toEqual({ t: 'tool-call-end', call: (call[1].ev as { call: string }).call, result: 'a\nb', isError: false });
+    expect(end[0].ev).toEqual({ t: 'tool-call-end', call: (call[0].ev as { call: string }).call, result: 'a\nb', isError: false });
 
-    mapper.map({ t: 'assistant', text: 'Done.', thinking: 'looked fine' });
+    const done = mapper.map({ t: 'assistant', text: 'Done.', thinking: 'looked fine' }).envelopes;
+    expect(done.map((e) => e.ev)).toEqual([
+      { t: 'text', text: 'looked fine', thinking: true },
+      { t: 'text', text: 'Done.' },
+    ]);
     const idle = mapper.map({ t: 'status', status: 'idle', outcome: 'completed' });
     expect(idle).toMatchObject({ thinking: false, turnEnded: true });
-    expect(idle.envelopes.map((e) => e.ev)).toEqual([
-      { t: 'text', text: 'Done.' },
-      { t: 'turn-end', status: 'completed' },
-    ]);
-    expect([...call, ...end, ...idle.envelopes].every((e) => e.turn === turn)).toBe(true);
+    expect(idle.envelopes.map((e) => e.ev)).toEqual([{ t: 'turn-end', status: 'completed' }]);
+    expect([...said, ...call, ...end, ...done, ...idle.envelopes].every((e) => e.turn === turn)).toBe(true);
   });
 
   it('links an ask to the call id its tool card carries, whichever arrives first', () => {

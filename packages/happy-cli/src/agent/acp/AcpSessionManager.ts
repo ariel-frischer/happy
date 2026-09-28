@@ -178,6 +178,23 @@ export class AcpSessionManager {
   }
 
   /**
+   * A finished agent message (or thinking block), sent now rather than held
+   * until the next tool call or turn end: a producer that only reports whole
+   * messages has nothing more to add to it.
+   */
+  completeText(text: string, thinking = false): SessionEnvelope[] {
+    const trimmed = text.replace(/^\n+|\n+$/g, '');
+    const flushed = this.flush();
+    if (!trimmed) {
+      return flushed;
+    }
+    return [
+      ...flushed,
+      createEnvelope('agent', { t: 'text', text: trimmed, ...(thinking ? { thinking: true } : {}) }, turnOptions(this.currentTurnId, this.nextTime())),
+    ];
+  }
+
+  /**
    * Starts a tool call, or restates a running one: the app merges a repeated
    * `tool-call-start` for the same call into its card (e.g. a new description).
    */

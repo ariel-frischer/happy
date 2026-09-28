@@ -38,8 +38,9 @@ export class OmpBridgeMapper {
           envelopes.push(...this.turns.mapMessage({ type: 'event', name: 'thinking', payload: { text: event.thinking, streaming: false } }));
         }
         if (event.text) {
-          // Separate consecutive assistant messages that land in one flushed block.
-          envelopes.push(...this.turns.mapMessage({ type: 'model-output', textDelta: `${event.text}\n\n` }));
+          // omp reports whole messages; hold nothing back. A turn can stay open
+          // for minutes (background jobs), so waiting for its end delays replies.
+          envelopes.push(...this.turns.completeText(event.text));
         }
         return { envelopes };
       }
