@@ -359,6 +359,18 @@ export type AgentCommunication = z.infer<typeof AgentCommunicationSchema>;
 export type AgentQuestionAnswer = z.infer<typeof AgentQuestionAnswerSchema>;
 export type CompletedAgentCommunication = z.infer<typeof CompletedAgentCommunicationSchema>;
 
+export const BackgroundJobSchema = z.object({
+    id: z.string(),
+    type: z.string(),
+    label: z.string(),
+    status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+    startTime: z.number(),
+    endTime: z.number().nullish(),
+    queued: z.boolean().nullish(),
+    callId: z.string().nullish(),
+});
+export type BackgroundJob = z.infer<typeof BackgroundJobSchema>;
+
 export const AgentStateSchema = z.object({
     controlledByUser: z.boolean().nullish(),
     // Ephemeral runtime state. A malformed snapshot must not invalidate
@@ -396,6 +408,9 @@ export const AgentStateSchema = z.object({
     agentGoalStatus: AgentGoalStatusSchema.optional(),
     // Transient agent operation shown in the status row ("Compacting context…"); null when idle.
     activity: z.string().nullish(),
+    // Background work (omp async subagents, backgrounded shells): running jobs plus
+    // ones that just ended. `callId` is the tool card that started the job.
+    backgroundJobs: z.array(BackgroundJobSchema).nullish().catch(null),
 });
 
 export type AgentState = z.infer<typeof AgentStateSchema>;

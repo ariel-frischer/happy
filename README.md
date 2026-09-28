@@ -31,8 +31,11 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 - Live TUI mirror: with the `happy-bridge` omp extension, a normal `omp` TUI on your laptop mirrors itself into Happy. It stays the only omp process. Phone messages go into that same session. If a turn is running, they steer it.
 - Sessions started from the phone run the omp TUI in a detached tmux session. Attach with `tmux attach -t happy-omp-<id>`. Without tmux, the daemon falls back to `happy acp omp`.
 - `ask` questions show inline in the chat and in the TUI at the same time. The first answer wins. After you submit, the card keeps the full questions and answers.
-- Tool calls show as compact cards. Tap a card to see its output. Stop in the app to abort the running turn.
-- Subagent runs show live progress on the task card (`2 subagents · 1 running · 1 done`).
+- Tool calls show as compact cards. Tap a card to see its output. Stop in the app aborts the running turn; background jobs keep running.
+- Subagent runs show live progress on the task card (`2 subagents · 1 running · 1 done`). The card keeps counting after the task call returns with subagents still in the background.
+- Background jobs (async bash, background subagents) show in a strip above the input while they run. Each row has its own Stop; tap a row to open the card that started it. Each finished job adds a card with its output (`Subagent done · 1m 12s`).
+- `/compact`, `/model` and `/thinking` typed in the app run in the mirrored session. Other omp commands (`/new`, `/resume`, `/fork`, and so on) only run from the TUI: the app shows a note and nothing reaches the model. Unknown `/text` goes to the model as a normal message.
+- `/resume` in the TUI reattaches the omp session to the Happy session it was mirrored to before. A session that was never mirrored gets a new Happy session with its recent history backfilled.
 - Images from tool results show inline, and a tap opens them fullscreen. Images you attach in the app reach omp.
 - Deleting or stopping a mirrored session in the app detaches the mirror. The TUI keeps running.
 - Opt out per run with `OMP_HAPPY_BRIDGE=0 omp`.
@@ -41,7 +44,7 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 
 - Tool approvals in a mirrored TUI stay on the laptop (or omp Collab). omp lets extensions observe approval requests but not answer them.
 - Happy's own push notifications need your own FCM credentials in the app build. Use ntfy (or similar) for pushes until then.
-- `/resume` in omp opens a fresh Happy session with no earlier history.
+- Tapping a background job opens its card's detail view; the chat does not scroll to the card.
 - Racing `ask` between the TUI and the app depends on omp internals. It was built against omp 18.3.5; later omp versions may break it.
 
 **Setup**

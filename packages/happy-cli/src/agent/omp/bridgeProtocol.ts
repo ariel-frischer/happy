@@ -8,7 +8,7 @@
  */
 import { z } from 'zod';
 
-export const OMP_BRIDGE_PROTOCOL_VERSION = 4;
+export const OMP_BRIDGE_PROTOCOL_VERSION = 5;
 
 const OmpSessionInfoSchema = z.object({
   cwd: z.string(),
@@ -73,6 +73,21 @@ const StatusEventSchema = z.object({
   leafId: z.string().optional(),
 });
 
+/** A background job in omp (async subagent, backgrounded bash/eval); omp's AsyncJob, minus internals. */
+const OmpJobSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  label: z.string(),
+  status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+  startTime: z.number(),
+  endTime: z.number().optional(),
+  /** Registered but waiting for a free slot. */
+  queued: z.boolean().optional(),
+  /** The omp tool call that started the job. */
+  toolCallId: z.string().optional(),
+});
+export type OmpJob = z.infer<typeof OmpJobSchema>;
+
 /** Past conversation replayed into a Happy session: the same events a live turn sends. */
 const HistoryEventSchema = z.discriminatedUnion('t', [UserEventSchema, AssistantEventSchema, ToolStartEventSchema, ToolEndEventSchema, StatusEventSchema]);
 export type OmpHistoryEvent = z.infer<typeof HistoryEventSchema>;
@@ -93,7 +108,7 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   UserEventSchema,
   AssistantEventSchema,
   ToolStartEventSchema,
-  /** A running tool's subtitle changed (e.g. subagent progress). */
+  /** A tool's subtitle changed (subagent progress), also after it returned while its subagents run on. */
   z.object({ t: z.literal('tool_update'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string() }),
   ToolEndEventSchema,
   /** Answer to `ready.backfill`: omp session history the Happy session lacks, oldest first. */
@@ -120,6 +135,10 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
    * `answers` is set when the user answered on the laptop.
    */
   z.object({ t: z.literal('ask_cancel'), id: z.string(), answers: z.array(OmpAskAnswerSchema).optional() }),
+  /** The running background jobs, plus ones that just ended; sent when the list changes. */
+  z.object({ t: z.literal('jobs'), jobs: z.array(OmpJobSchema) }),
+  /** A background job ended; `output` is its result or error text, already capped. */
+  z.object({ t: z.literal('job_end'), job: OmpJobSchema, output: z.string().optional() }),
 ]);
 export type ExtToBridge = z.infer<typeof ExtToBridgeSchema>;
 
@@ -132,8 +151,10 @@ export type BridgeToExt =
   | { t: 'ready'; v: number; happySessionId: string | null; backfill?: { afterEntryId?: string } }
   /** Message typed in the Happy app; deliver with `pi.sendUserMessage`. */
   | { t: 'user_message'; text: string; images?: OmpImage[] }
-  /** Stop button in the app. */
+  /** Stop button in the app: ends the current turn; background jobs keep running. */
   | { t: 'abort' }
+  /** A background job's Stop button in the app. */
+  | { t: 'cancel_job'; id: string }
   /** The app answered an `ask` first; resolve the TUI dialog with these results. */
   | { t: 'ask_answer'; id: string; results: OmpAskResultItem[] }
   /** The app dismissed an `ask` form; cancel the TUI dialog too. */

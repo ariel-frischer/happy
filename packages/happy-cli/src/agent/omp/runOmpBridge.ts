@@ -146,6 +146,9 @@ export async function runOmpBridge(): Promise<void> {
     session.rpcHandlerManager.registerHandler('abort', async () => {
       if (!mirror.closed) send({ t: 'abort' });
     });
+    session.rpcHandlerManager.registerHandler<{ id?: unknown }, void>('cancelJob', async (params) => {
+      if (!mirror.closed && typeof params?.id === 'string') send({ t: 'cancel_job', id: params.id });
+    });
     registerKillSessionHandler(session.rpcHandlerManager, () => detach(mirror, 'Stopped from the Happy app'));
     // The offline stub is not an EventEmitter; archive signals only come from a live socket.
     if (typeof session.on === 'function') {
@@ -378,6 +381,16 @@ export async function runOmpBridge(): Promise<void> {
       case 'activity':
         if (current) setActivity(current, event.text || null);
         return;
+      case 'jobs': {
+        const mirror = current;
+        if (!mirror) return;
+        const backgroundJobs = event.jobs.map(({ toolCallId, ...job }) => ({
+          ...job,
+          ...(toolCallId ? { callId: mirror.mapper.sessionCallId(toolCallId) } : {}),
+        }));
+        mirror.session.updateAgentState((state) => ({ ...state, backgroundJobs }));
+        return;
+      }
       default:
         if (current) sendMapped(current, event);
     }

@@ -366,6 +366,20 @@ export type UsageLimits = {
   windows: UsageLimitWindow[],
 }
 
+export type BackgroundJob = {
+  id: string,
+  /** omp job type: `task` (subagent), `bash`, `eval`. */
+  type: string,
+  label: string,
+  status: 'running' | 'completed' | 'failed' | 'cancelled',
+  /** Epoch milliseconds. */
+  startTime: number,
+  endTime?: number,
+  /** Waiting for a free slot. */
+  queued?: boolean,
+  callId?: string,
+}
+
 export type AgentGoalStatus = {
   source: 'claude' | 'codex',
   observedAt: number,
@@ -412,6 +426,12 @@ export type AgentState = {
    * shown in place of the thinking label; null once it is over.
    */
   activity?: string | null
+  /**
+   * Background work of the agent (omp async subagents, backgrounded shells):
+   * the running jobs plus ones that ended a moment ago. `callId` is the tool
+   * card that started a job; the app stops one with the `cancelJob` RPC.
+   */
+  backgroundJobs?: BackgroundJob[] | null
   requests?: {
     [id: string]: {
       tool: string,

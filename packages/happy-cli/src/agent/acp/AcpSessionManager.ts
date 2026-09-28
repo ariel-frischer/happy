@@ -31,7 +31,24 @@ function parseThinkingPayload(payload: unknown): { text: string; streaming: bool
 export class AcpSessionManager {
   private currentTurnId: string | null = null;
   private readonly acpCallToSessionCall = new Map<string, string>();
+  /** The turn each tool call started in, by session call id. */
+  private readonly callTurns = new Map<string, string | null>();
   private runningCalls: string[] = [];
+
+  /**
+   * `callIdsOutliveTurns`: the producer's tool call ids are unique for the
+   * whole session, so a call keeps its card after its turn ends (omp's
+   * background subagents update their task card later). ACP agents may reuse
+   * ids across turns, so by default each turn starts a fresh mapping.
+   */
+  constructor(private readonly options: { callIdsOutliveTurns?: boolean } = {}) {}
+
+  private forgetTurnCalls(): void {
+    this.runningCalls = [];
+    if (this.options.callIdsOutliveTurns) return;
+    this.acpCallToSessionCall.clear();
+    this.callTurns.clear();
+  }
 
   /** Monotonic clock: max(lastTime + 1, Date.now()) */
   private lastTime = 0;
@@ -90,8 +107,7 @@ export class AcpSessionManager {
     }
 
     this.currentTurnId = createId();
-    this.acpCallToSessionCall.clear();
-    this.runningCalls = [];
+    this.forgetTurnCalls();
     return [
       createEnvelope('agent', { t: 'turn-start' }, { turn: this.currentTurnId, time: this.nextTime() }),
     ];
@@ -105,8 +121,7 @@ export class AcpSessionManager {
 
     const turnId = this.currentTurnId;
     this.currentTurnId = null;
-    this.acpCallToSessionCall.clear();
-    this.runningCalls = [];
+    this.forgetTurnCalls();
     return [
       ...flushed,
       createEnvelope('agent', { t: 'turn-end', status }, { turn: turnId, time: this.nextTime() }),
@@ -204,6 +219,9 @@ export class AcpSessionManager {
     if (!this.runningCalls.includes(call)) {
       this.runningCalls.push(call);
     }
+    if (!this.callTurns.has(call)) {
+      this.callTurns.set(call, this.currentTurnId);
+    }
     return [
       ...flushed,
       createEnvelope('agent', {
@@ -214,6 +232,25 @@ export class AcpSessionManager {
         description: description || buildToolDescription(toolName),
         args,
       }, turnOptions(this.currentTurnId, this.nextTime())),
+    ];
+  }
+
+  /**
+   * Restates a tool call's card (e.g. a new description) without reopening it,
+   * also after it ended; it stays in the turn it started in.
+   */
+  toolCallRestate(acpCallId: string, toolName: string, args: Record<string, unknown>, description?: string): SessionEnvelope[] {
+    const call = this.sessionCallId(acpCallId);
+    const turn = this.callTurns.has(call) ? this.callTurns.get(call)! : this.currentTurnId;
+    return [
+      createEnvelope('agent', {
+        t: 'tool-call-start',
+        call,
+        name: toolName,
+        title: buildToolTitle(toolName),
+        description: description || buildToolDescription(toolName),
+        args,
+      }, turnOptions(turn, this.nextTime())),
     ];
   }
 

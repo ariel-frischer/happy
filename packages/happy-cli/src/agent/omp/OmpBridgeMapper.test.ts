@@ -79,6 +79,39 @@ describe('OmpBridgeMapper', () => {
     expect(plain.ev).toMatchObject({ description: 'Running read' });
   });
 
+  it('keeps a task card in its own turn when background subagents update it after the turn ended', () => {
+    const mapper = new OmpBridgeMapper();
+    const turn = mapper.map({ t: 'status', status: 'busy' }).envelopes[0].turn;
+    mapper.map({ t: 'tool_start', id: 't1', name: 'task', args: {}, subtitle: '2 subagents' });
+    mapper.map({ t: 'tool_end', id: 't1', name: 'task', isError: false, output: 'Spawned 2 background agents' });
+    mapper.map({ t: 'status', status: 'idle', outcome: 'completed' });
+    const nextTurn = mapper.map({ t: 'status', status: 'busy' }).envelopes[0].turn;
+
+    const [update] = mapper.map({ t: 'tool_update', id: 't1', name: 'task', args: {}, subtitle: '2 subagents · 1 running · 1 done' }).envelopes;
+
+    expect(update.ev).toMatchObject({ t: 'tool-call-start', call: mapper.sessionCallId('t1'), description: '2 subagents · 1 running · 1 done' });
+    expect(update.turn).toBe(turn);
+    expect(update.turn).not.toBe(nextTurn);
+  });
+
+  it('shows an ended background job as a closed card with its outcome, duration and output', () => {
+    const mapper = new OmpBridgeMapper();
+    const job = { id: 'Explore', type: 'task', label: 'Explore', startTime: 1_000, endTime: 73_000 };
+
+    const done = mapper.map({ t: 'job_end', job: { ...job, status: 'completed' }, output: 'found it' }).envelopes;
+    const failed = mapper.map({ t: 'job_end', job: { ...job, id: 'bg_1', type: 'bash', label: 'sleep 90', status: 'cancelled' } }).envelopes;
+
+    expect(done.map((e) => e.ev)).toEqual([
+      expect.objectContaining({ t: 'tool-call-start', title: 'Explore', description: 'Subagent done · 1m 12s' }),
+      expect.objectContaining({ t: 'tool-call-end', result: 'found it', isError: false }),
+    ]);
+    expect(failed.map((e) => e.ev)).toEqual([
+      expect.objectContaining({ t: 'tool-call-start', title: 'sleep 90', description: 'Background bash stopped · 1m 12s' }),
+      expect.objectContaining({ t: 'tool-call-end', isError: true }),
+    ]);
+    expect((failed[0].ev as { call: string }).call).not.toBe((done[0].ev as { call: string }).call);
+  });
+
   it('reports a failed turn with the error text', () => {
     const mapper = new OmpBridgeMapper();
     mapper.map({ t: 'status', status: 'busy' });

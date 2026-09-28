@@ -77,6 +77,7 @@ import {
     rigCanUseShell,
 } from '@/sync/rig';
 import { RigActivityBar } from '@/components/RigActivityBar';
+import { BackgroundJobsBar } from '@/components/BackgroundJobsBar';
 import { AnimatedFade } from '@/components/AnimatedOverlay';
 
 export const SessionView = React.memo((props: { id: string }) => {
@@ -1253,6 +1254,11 @@ export function SessionViewLoaded({
             <AnimatedFade visible={showBottomDockDetails}>
                 <RigActivityBar metadata={session?.metadata ?? null} />
             </AnimatedFade>
+            {session && !isDisconnected && !!session.agentState?.backgroundJobs?.length && (
+                <AnimatedFade visible={showBottomDockDetails}>
+                    <BackgroundJobsBar sessionId={session.id} jobs={session.agentState.backgroundJobs} />
+                </AnimatedFade>
+            )}
             {composer}
         </>
     );

@@ -894,6 +894,11 @@ export async function sessionAbort(sessionId: string): Promise<void> {
     });
 }
 
+/** Stops one background job (an omp subagent or backgrounded shell) listed in `agentState.backgroundJobs`. */
+export async function sessionCancelBackgroundJob(sessionId: string, jobId: string): Promise<void> {
+    await apiSocket.sessionRPC(sessionId, 'cancelJob', { id: jobId });
+}
+
 /**
  * Puts a picture already uploaded to the session's attachment store onto the
  * bot behind a Happy Agent session. The agent downloads it by ref the way it
