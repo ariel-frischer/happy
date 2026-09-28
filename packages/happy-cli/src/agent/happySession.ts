@@ -67,7 +67,9 @@ export async function openHappySession(opts: {
   });
 
   if (response && opts.reopen) {
-    // The server ignores the metadata sent for an existing tag.
+    // The server ignores the metadata sent for an existing tag, and the app
+    // messages already in the session were handled when they were sent.
+    session.skipExistingMessages();
     session.updateMetadata(() => metadata);
     session.updateAgentState(() => state);
   }
