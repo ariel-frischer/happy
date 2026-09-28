@@ -25,24 +25,33 @@ export class ApiClient {
   }
 
   /**
-   * Create a new session or load existing one with the given tag
+   * Create a new session or load existing one with the given tag.
+   * `encryption` reopens a session this client created before: the server only
+   * returns the data key encrypted for the app, so the caller must keep its own copy.
    */
   async getOrCreateSession(opts: {
     tag: string,
     metadata: Metadata,
-    state: AgentState | null
+    state: AgentState | null,
+    encryption?: { key: Uint8Array, variant: 'legacy' | 'dataKey' }
   }): Promise<Session | null> {
 
     // Resolve encryption key
     let dataEncryptionKey: Uint8Array | null = null;
     let encryptionKey: Uint8Array;
     let encryptionVariant: 'legacy' | 'dataKey';
-    if (this.credential.encryption.type === 'dataKey') {
-
+    if (opts.encryption) {
+      encryptionKey = opts.encryption.key;
+      encryptionVariant = opts.encryption.variant;
+    } else if (this.credential.encryption.type === 'dataKey') {
       // Generate new encryption key
       encryptionKey = getRandomBytes(32);
       encryptionVariant = 'dataKey';
-
+    } else {
+      encryptionKey = this.credential.encryption.secret;
+      encryptionVariant = 'legacy';
+    }
+    if (encryptionVariant === 'dataKey' && this.credential.encryption.type === 'dataKey') {
       // Derive and encrypt data encryption key
       // const contentDataKey = await deriveKey(this.secret, 'Happy EnCoder', ['content']);
       // const publicKey = libsodiumPublicKeyFromSecretKey(contentDataKey);
@@ -50,9 +59,6 @@ export class ApiClient {
       dataEncryptionKey = new Uint8Array(encryptedDataKey.length + 1);
       dataEncryptionKey.set([0], 0); // Version byte
       dataEncryptionKey.set(encryptedDataKey, 1); // Data key
-    } else {
-      encryptionKey = this.credential.encryption.secret;
-      encryptionVariant = 'legacy';
     }
 
     // Create session

@@ -8,7 +8,7 @@
  */
 import { z } from 'zod';
 
-export const OMP_BRIDGE_PROTOCOL_VERSION = 3;
+export const OMP_BRIDGE_PROTOCOL_VERSION = 4;
 
 const OmpSessionInfoSchema = z.object({
   cwd: z.string(),
@@ -48,6 +48,35 @@ export type OmpAskResultItem = OmpAskAnswer & {
 const OmpImageSchema = z.object({ data: z.string(), mimeType: z.string() });
 export type OmpImage = z.infer<typeof OmpImageSchema>;
 
+/** A user message typed in the TUI (phone-originated messages are never echoed). */
+const UserEventSchema = z.object({ t: z.literal('user'), text: z.string(), images: z.array(OmpImageSchema).optional() });
+/** One finished assistant message. */
+const AssistantEventSchema = z.object({ t: z.literal('assistant'), text: z.string().optional(), thinking: z.string().optional() });
+/** `subtitle` is a short omp-specific summary (task progress, eval language, search query…). */
+const ToolStartEventSchema = z.object({ t: z.literal('tool_start'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string().optional() });
+/** `output` is the tool's text result, already capped; `images` are image blocks of the result. */
+const ToolEndEventSchema = z.object({
+  t: z.literal('tool_end'),
+  id: z.string(),
+  name: z.string(),
+  isError: z.boolean(),
+  output: z.string().optional(),
+  images: z.array(OmpImageSchema).optional(),
+});
+const StatusEventSchema = z.object({
+  t: z.literal('status'),
+  status: z.enum(['busy', 'idle']),
+  /** How the finished turn ended; only meaningful with `idle`. */
+  outcome: z.enum(['completed', 'cancelled', 'failed']).optional(),
+  error: z.string().optional(),
+  /** omp session entry the session ended the turn on (`idle` only); history resumes after it. */
+  leafId: z.string().optional(),
+});
+
+/** Past conversation replayed into a Happy session: the same events a live turn sends. */
+const HistoryEventSchema = z.discriminatedUnion('t', [UserEventSchema, AssistantEventSchema, ToolStartEventSchema, ToolEndEventSchema, StatusEventSchema]);
+export type OmpHistoryEvent = z.infer<typeof HistoryEventSchema>;
+
 /** Extension → bridge. */
 export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   /**
@@ -56,34 +85,29 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
    * `happy` launcher sits between omp and the bridge, so ppid is not omp).
    */
   z.object({ t: z.literal('hello'), v: z.number(), pid: z.number().int(), session: OmpSessionInfoSchema }),
-  /** omp switched session (/new, /resume, /fork, branch): rotate the Happy session. */
+  /**
+   * omp switched session (/new, /resume, /fork, branch): mirror the new one,
+   * reattaching to its Happy session when it was mirrored before.
+   */
   z.object({ t: z.literal('session'), session: OmpSessionInfoSchema }),
-  /** A user message typed in the TUI (phone-originated messages are never echoed). */
-  z.object({ t: z.literal('user'), text: z.string(), images: z.array(OmpImageSchema).optional() }),
-  /** One finished assistant message. */
-  z.object({ t: z.literal('assistant'), text: z.string().optional(), thinking: z.string().optional() }),
-  /** `subtitle` is a short omp-specific summary (task progress, eval language, search query…). */
-  z.object({ t: z.literal('tool_start'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string().optional() }),
+  UserEventSchema,
+  AssistantEventSchema,
+  ToolStartEventSchema,
   /** A running tool's subtitle changed (e.g. subagent progress). */
   z.object({ t: z.literal('tool_update'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string() }),
-  /** `output` is the tool's text result, already capped; `images` are image blocks of the result. */
+  ToolEndEventSchema,
+  /** Answer to `ready.backfill`: omp session history the Happy session lacks, oldest first. */
   z.object({
-    t: z.literal('tool_end'),
-    id: z.string(),
-    name: z.string(),
-    isError: z.boolean(),
-    output: z.string().optional(),
-    images: z.array(OmpImageSchema).optional(),
+    t: z.literal('history'),
+    events: z.array(HistoryEventSchema),
+    /** Older messages left out to bound the replay. */
+    omitted: z.number().int(),
+    /** Last omp session entry covered. */
+    leafId: z.string().optional(),
   }),
   /** Transient busy detail ("Compacting context…"); no `text` clears it. */
   z.object({ t: z.literal('activity'), text: z.string().optional() }),
-  z.object({
-    t: z.literal('status'),
-    status: z.enum(['busy', 'idle']),
-    /** How the finished turn ended; only meaningful with `idle`. */
-    outcome: z.enum(['completed', 'cancelled', 'failed']).optional(),
-    error: z.string().optional(),
-  }),
+  StatusEventSchema,
   z.object({ t: z.literal('title'), title: z.string() }),
   /** omp is shutting down: archive the Happy session and exit. */
   z.object({ t: z.literal('end') }),
@@ -99,7 +123,11 @@ export type ExtToBridge = z.infer<typeof ExtToBridgeSchema>;
 
 /** Bridge → extension. */
 export type BridgeToExt =
-  | { t: 'ready'; v: number; happySessionId: string | null }
+  /**
+   * The Happy session is open. `backfill` asks for omp history it does not show
+   * yet: everything (new session), or only entries after `afterEntryId` (reattached).
+   */
+  | { t: 'ready'; v: number; happySessionId: string | null; backfill?: { afterEntryId?: string } }
   /** Message typed in the Happy app; deliver with `pi.sendUserMessage`. */
   | { t: 'user_message'; text: string; images?: OmpImage[] }
   /** Stop button in the app. */

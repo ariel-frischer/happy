@@ -9,17 +9,23 @@ import { logger } from '@/ui/logger';
 import { createSessionMetadata, type BackendFlavor } from '@/utils/createSessionMetadata';
 import { setupOfflineReconnection, type SetupOfflineReconnectionResult } from '@/utils/setupOfflineReconnection';
 
+export type HappySessionEncryption = { key: Uint8Array; variant: 'legacy' | 'dataKey' };
+
 export type OpenedHappySession = {
   /** Happy session id, or null while the server is unreachable (offline reconnection pending). */
   id: string | null;
   session: ApiSessionClient;
   metadata: Metadata;
   reconnectionHandle: SetupOfflineReconnectionResult['reconnectionHandle'];
+  /** Server tag and key; pass both back as `reopen` to reattach to this session later. */
+  tag: string;
+  encryption: HappySessionEncryption | null;
 };
 
 /**
- * Create a Happy session row, attach the offline-reconnection client, and
- * report it to the local daemon so the app can resume/stop it.
+ * Create a Happy session row (or reopen the one `reopen` names), attach the
+ * offline-reconnection client, and report it to the local daemon so the app
+ * can resume/stop it.
  */
 export async function openHappySession(opts: {
   api: ApiClient;
@@ -31,6 +37,12 @@ export async function openHappySession(opts: {
   metadataOverrides?: Partial<Metadata>;
   onSessionSwap: (session: ApiSessionClient) => void;
   logPrefix: string;
+  /**
+   * Reattach to a session this machine opened before. The server keeps its
+   * messages and returns it by tag; if it was deleted, a new one is created.
+   * Either way it gets fresh metadata and agent state (no longer archived).
+   */
+  reopen?: { tag: string; encryption: HappySessionEncryption };
 }): Promise<OpenedHappySession> {
   const created = createSessionMetadata({
     flavor: opts.flavor,
@@ -40,8 +52,9 @@ export async function openHappySession(opts: {
   });
   const state = created.state;
   const metadata: Metadata = { ...created.metadata, ...opts.metadataOverrides };
-  const sessionTag = randomUUID();
-  const response = await opts.api.getOrCreateSession({ tag: sessionTag, metadata, state });
+  const sessionTag = opts.reopen?.tag ?? randomUUID();
+  const encryption = opts.reopen?.encryption;
+  const response = await opts.api.getOrCreateSession({ tag: sessionTag, metadata, state, encryption });
 
   const { session, reconnectionHandle } = setupOfflineReconnection({
     api: opts.api,
@@ -49,8 +62,15 @@ export async function openHappySession(opts: {
     metadata,
     state,
     response,
+    encryption,
     onSessionSwap: opts.onSessionSwap,
   });
+
+  if (response && opts.reopen) {
+    // The server ignores the metadata sent for an existing tag.
+    session.updateMetadata(() => metadata);
+    session.updateAgentState(() => state);
+  }
 
   if (response) {
     try {
@@ -66,7 +86,14 @@ export async function openHappySession(opts: {
     }
   }
 
-  return { id: response?.id ?? null, session, metadata, reconnectionHandle };
+  return {
+    id: response?.id ?? null,
+    session,
+    metadata,
+    reconnectionHandle,
+    tag: sessionTag,
+    encryption: response ? { key: response.encryptionKey, variant: response.encryptionVariant } : (encryption ?? null),
+  };
 }
 
 /** Mark a session archived, announce its end, and close the socket. Never throws. */

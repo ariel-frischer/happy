@@ -14,9 +14,10 @@ import { readCredentials, readSettings } from '@/persistence';
 import { logger } from '@/ui/logger';
 import { connectionState } from '@/utils/serverConnectionErrors';
 import { detectImageMime, extensionForImageMime, readImageSize } from '@/utils/imageFormat';
-import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpImage, type OmpSessionInfo } from './bridgeProtocol';
+import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpHistoryEvent, type OmpImage, type OmpSessionInfo } from './bridgeProtocol';
 import { OmpBridgeMapper } from './OmpBridgeMapper';
 import { formAnswersToOmpAsk, ompAskToForm, ompAskToFormAnswers } from './ompAskForm';
+import { readOmpMirror, writeOmpMirror } from './ompMirrorStore';
 
 const LOG = '[omp-bridge]';
 const KEEP_ALIVE_MS = 2000;
@@ -25,6 +26,8 @@ const PUSH_BODY_MAX = 140;
 const APP_IMAGES_MAX_BYTES = 20 * 1024 * 1024;
 
 type Mirror = {
+  /** The omp session this mirrors. */
+  ompSessionId: string;
   session: ApiSessionClient;
   opened: OpenedHappySession;
   mapper: OmpBridgeMapper;
@@ -148,8 +151,21 @@ export async function runOmpBridge(): Promise<void> {
     }
   };
 
+  /** Remembers which Happy session shows `ompSessionId`, through omp entry `leafId`. */
+  const recordMirror = (mirror: Mirror, leafId: string | undefined) => {
+    const { id, tag, encryption } = mirror.opened;
+    if (!id || !encryption) return; // offline: nothing to reattach to yet
+    writeOmpMirror(mirror.ompSessionId, { happySessionId: id, tag, encryption, ...(leafId ? { leafId } : {}) });
+  };
+
+  /**
+   * Mirrors omp session `info`. A session mirrored before gets its Happy
+   * session back (history intact, un-archived); otherwise a new one is opened
+   * and the extension is asked to backfill the omp history into it.
+   */
   const openMirror = async (info: OmpSessionInfo, hostPid: number) => {
     let mirror: Mirror | null = null;
+    const previous = readOmpMirror(info.ompSessionId);
     const opened = await openHappySession({
       api,
       machineId,
@@ -160,6 +176,7 @@ export async function runOmpBridge(): Promise<void> {
       // pane pid and stops sessions by signalling this pid.
       metadataOverrides: { path: info.cwd, hostPid, ...titleMetadata(info.title) },
       logPrefix: LOG,
+      ...(previous ? { reopen: { tag: previous.tag, encryption: previous.encryption } } : {}),
       onSessionSwap: (session) => {
         if (!mirror || mirror.closed) return;
         mirror.session = session;
@@ -168,6 +185,7 @@ export async function runOmpBridge(): Promise<void> {
       },
     });
     const created: Mirror = {
+      ompSessionId: info.ompSessionId,
       session: opened.session,
       opened,
       mapper: new OmpBridgeMapper(),
@@ -186,8 +204,12 @@ export async function runOmpBridge(): Promise<void> {
     created.forms.cancelAll('Previous omp bridge exited before responding');
     created.session.keepAlive(false, 'remote');
     current = created;
-    logger.debug(`${LOG} opened Happy session ${opened.id} for omp session ${info.ompSessionId} in ${info.cwd}`);
-    send({ t: 'ready', v: OMP_BRIDGE_PROTOCOL_VERSION, happySessionId: opened.id });
+    const reattached = previous !== null && opened.id === previous.happySessionId;
+    recordMirror(created, reattached ? previous.leafId : undefined);
+    logger.debug(`${LOG} ${reattached ? 'reattached' : 'opened'} Happy session ${opened.id} for omp session ${info.ompSessionId} in ${info.cwd}`);
+    // Offline (no id): the session may exist or not; skip the backfill rather than guess.
+    const backfill = opened.id === null ? undefined : reattached ? (previous.leafId ? { afterEntryId: previous.leafId } : undefined) : {};
+    send({ t: 'ready', v: OMP_BRIDGE_PROTOCOL_VERSION, happySessionId: opened.id, ...(backfill ? { backfill } : {}) });
   };
 
   const pushNotification = (mirror: Mirror, kind: 'done' | 'question', data: Record<string, unknown>, body?: string) => {
@@ -220,11 +242,13 @@ export async function runOmpBridge(): Promise<void> {
     mirror.session.updateAgentState((state) => ({ ...state, activity }));
   };
 
-  const sendMapped = (mirror: Mirror, event: ExtToBridge) => {
+  /** `replay`: a history event; it changes neither the busy state nor notifies. */
+  const sendMapped = (mirror: Mirror, event: ExtToBridge, replay = false) => {
     const mapped = mirror.mapper.map(event);
     for (const envelope of mapped.envelopes) {
       mirror.session.sendSessionProtocolMessage(envelope);
     }
+    if (replay) return;
     if (mapped.thinking !== undefined && mapped.thinking !== mirror.thinking) {
       mirror.thinking = mapped.thinking;
       mirror.session.keepAlive(mirror.thinking, 'remote');
@@ -238,6 +262,33 @@ export async function runOmpBridge(): Promise<void> {
       }
       mirror.appTurn = false;
     }
+  };
+
+  /** Sends a conversation event, with its images, to the Happy session. */
+  const relay = async (mirror: Mirror, event: ExtToBridge, replay = false) => {
+    if (event.t === 'user') {
+      // Like app messages: the pictures first, then the text they go with.
+      for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'user');
+      sendMapped(mirror, event, replay);
+      return;
+    }
+    sendMapped(mirror, event, replay);
+    // Shown right under the tool card they came from.
+    if (event.t === 'tool_end') {
+      for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'agent');
+    }
+  };
+
+  const replayHistory = async (mirror: Mirror, events: OmpHistoryEvent[], omitted: number, leafId: string | undefined) => {
+    logger.debug(`${LOG} backfilling ${events.length} omp events into ${mirror.opened.id} (${omitted} older messages omitted)`);
+    if (omitted > 0) {
+      mirror.session.sendSessionEvent({ type: 'message', message: `… ${omitted} earlier message${omitted === 1 ? '' : 's'} not shown` });
+    }
+    for (const event of events) {
+      if (mirror.closed) return;
+      await relay(mirror, event, true);
+    }
+    recordMirror(mirror, leafId);
   };
 
   /** Shows a TUI `ask` in the app; whichever side answers first wins. */
@@ -284,6 +335,8 @@ export async function runOmpBridge(): Promise<void> {
           logger.debug(`${LOG} ignoring session switch before hello`);
           return;
         }
+        // Branching within the same session file keeps its mirror.
+        if (current?.ompSessionId === event.session.ompSessionId) return;
         if (current) await closeMirror(current, 'omp switched session');
         await openMirror(event.session, ompPid);
         return;
@@ -305,22 +358,18 @@ export async function runOmpBridge(): Promise<void> {
         current?.session.updateMetadata((metadata) => ({ ...metadata, ...titleMetadata(title) }));
         return;
       }
-      case 'user': {
-        const mirror = current;
-        if (!mirror) return;
-        // Like app messages: the pictures first, then the text they go with.
-        for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'user');
-        sendMapped(mirror, event);
+      case 'user':
+      case 'tool_end':
+        if (current) await relay(current, event);
         return;
-      }
-      case 'tool_end': {
-        const mirror = current;
-        if (!mirror) return;
-        sendMapped(mirror, event);
-        // Shown right under the tool card they came from.
-        for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'agent');
+      case 'history':
+        if (current) await replayHistory(current, event.events, event.omitted, event.leafId);
         return;
-      }
+      case 'status':
+        if (!current) return;
+        sendMapped(current, event);
+        if (event.status === 'idle' && event.leafId) recordMirror(current, event.leafId);
+        return;
       case 'activity':
         if (current) setActivity(current, event.text || null);
         return;
