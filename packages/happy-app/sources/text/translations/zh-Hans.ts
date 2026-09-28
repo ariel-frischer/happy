@@ -70,6 +70,8 @@ export const zhHans: TranslationStructure = {
         loadMore: '加载更多',
         delete: '删除',
         optional: '可选的',
+        close: '关闭',
+        viewImage: '查看图片',
     },
 
     profile: {

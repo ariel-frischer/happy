@@ -79,6 +79,8 @@ export const ru: TranslationStructure = {
         loadMore: 'Загрузить ещё',
         delete: 'Удалить',
         optional: 'необязательно',
+        close: 'Закрыть',
+        viewImage: 'Открыть изображение',
     },
 
     connect: {

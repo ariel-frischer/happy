@@ -38,7 +38,7 @@ happy openclaw
 
 # or any ACP-compatible CLI
 happy acp opencode
-happy acp omp   # Oh My Pi: `omp acp`, with phone approvals and ask forms
+happy acp omp   # Oh My Pi, headless over ACP (see the omp note below)
 happy acp -- custom-agent --flag
 ```
 
@@ -51,15 +51,9 @@ happy acp -- custom-agent --flag
 > inside Happy, so selecting "default" for an agy session does **not** give
 > you an approval prompt the way it does for Claude Code.
 
-> **omp dual mode:** with the omp `happy-bridge` extension installed, a
-> normal `omp` TUI on your computer mirrors itself into Happy through the
-> hidden `happy omp-bridge` subcommand (JSON lines over stdio), and messages
-> from the phone land in that same live process. Sessions started from the
-> phone with agent `omp` run the TUI in a detached tmux session
-> `happy-omp-<id>`; attach with `tmux attach -t happy-omp-<id>`. Without tmux,
-> the daemon falls back to headless `happy acp omp`. `ask` questions show in
-> the TUI and as an app form at once, and the first answer wins. Tool approvals
-> stay on the computer in this mode.
+> **omp:** this fork's omp support (live TUI mirror, phone-started tmux
+> sessions, ask forms, limits, setup) is described in the
+> [root README](../../README.md#happy--omp-personal-fork-experimental).
 
 ## Daemon
 

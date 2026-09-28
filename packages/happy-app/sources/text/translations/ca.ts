@@ -68,6 +68,8 @@ export const ca: TranslationStructure = {
         loadMore: 'Carrega més',
         delete: 'Elimina',
         optional: 'Opcional',
+        close: 'Tanca',
+        viewImage: 'Veure imatge',
     },
 
     profile: {

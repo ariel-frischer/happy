@@ -407,6 +407,11 @@ export type AgentState = {
    * Apps must tolerate window ids they don't recognize.
    */
   usageLimits?: UsageLimits
+  /**
+   * Transient detail of what a busy agent is doing ("Compacting context…"),
+   * shown in place of the thinking label; null once it is over.
+   */
+  activity?: string | null
   requests?: {
     [id: string]: {
       tool: string,

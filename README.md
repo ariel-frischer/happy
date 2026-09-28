@@ -20,6 +20,37 @@ Use Claude Code or Codex from anywhere with end-to-end encryption.
 
 </div>
 
+## Happy + omp (personal fork, experimental)
+
+This is Ariel's personal, experimental fork of [slopus/happy](https://github.com/slopus/happy). It adds support for [omp (Oh My Pi)](https://github.com/can1357/oh-my-pi). It is not affiliated with or supported by the Happy maintainers, and it may break at any time. Everything below this section is upstream's README.
+
+**What works**
+
+- `happy acp omp` runs omp headless over ACP. Approvals and `ask` forms work on the phone in this mode.
+- omp is the first agent in the app and the default for new sessions. The daemon can start it on your computer.
+- Live TUI mirror: with the `happy-bridge` omp extension, a normal `omp` TUI on your laptop mirrors itself into Happy. It stays the only omp process. Phone messages go into that same session. If a turn is running, they steer it.
+- Sessions started from the phone run the omp TUI in a detached tmux session. Attach with `tmux attach -t happy-omp-<id>`. Without tmux, the daemon falls back to `happy acp omp`.
+- `ask` questions show inline in the chat and in the TUI at the same time. The first answer wins. After you submit, the card keeps the full questions and answers.
+- Tool calls show as compact cards. Tap a card to see its output. Stop in the app to abort the running turn.
+- Subagent runs show live progress on the task card (`2 subagents · 1 running · 1 done`).
+- Images from tool results show inline, and a tap opens them fullscreen. Images you attach in the app reach omp.
+- Deleting or stopping a mirrored session in the app detaches the mirror. The TUI keeps running.
+- Opt out per run with `OMP_HAPPY_BRIDGE=0 omp`.
+
+**Known limits**
+
+- Tool approvals in a mirrored TUI stay on the laptop (or omp Collab). omp lets extensions observe approval requests but not answer them.
+- Happy's own push notifications need your own FCM credentials in the app build. Use ntfy (or similar) for pushes until then.
+- `/resume` in omp opens a fresh Happy session with no earlier history.
+- Racing `ask` between the TUI and the app depends on omp internals. It was built against omp 18.3.5; later omp versions may break it.
+
+**Setup**
+
+1. Build and link the CLI from this repo: `pnpm install && pnpm --filter happy build`, then `npm link` in `packages/happy-cli`.
+2. Put the `happy-bridge.ts` omp extension in `~/.omp/agent/extensions/`. It lives in Ariel's omp config, not in this repo.
+3. Authenticate and start the daemon: `happy auth login`, then `happy daemon start` (after a rebuild: `happy daemon stop; happy daemon start`).
+4. Run `omp` as usual. The session appears in the app.
+
 <img width="5178" height="2364" alt="github" src="/.github/header.png" />
 
 

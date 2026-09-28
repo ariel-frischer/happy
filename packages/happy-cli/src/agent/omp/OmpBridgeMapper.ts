@@ -23,6 +23,11 @@ export class OmpBridgeMapper {
     return this.turns.sessionCallId(ompToolCallId);
   }
 
+  /** Envelope options (turn, monotonic time) for an agent event in the current turn. */
+  agentEnvelopeOptions() {
+    return this.turns.agentEnvelopeOptions();
+  }
+
   map(event: ExtToBridge): OmpMappedEvent {
     switch (event.t) {
       case 'user':
@@ -39,9 +44,10 @@ export class OmpBridgeMapper {
         return { envelopes };
       }
       case 'tool_start':
-        return { envelopes: this.turns.mapMessage({ type: 'tool-call', toolName: event.name, args: event.args, callId: event.id }) };
+      case 'tool_update':
+        return { envelopes: this.turns.toolCallStart(event.id, event.name, event.args, event.subtitle) };
       case 'tool_end':
-        return { envelopes: this.turns.mapMessage({ type: 'tool-result', toolName: event.name, result: { isError: event.isError }, callId: event.id }) };
+        return { envelopes: this.turns.toolCallEnd(event.id, { isError: event.isError, ...(event.output !== undefined ? { result: event.output } : {}) }) };
       case 'status': {
         if (event.status === 'busy') {
           return { envelopes: this.turns.startTurn(), thinking: true };

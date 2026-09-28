@@ -70,6 +70,8 @@ export const ja: TranslationStructure = {
         loadMore: 'さらに読み込む',
         delete: '削除',
         optional: '任意',
+        close: '閉じる',
+        viewImage: '画像を表示',
         saveAs: '名前を付けて保存',
     },
 

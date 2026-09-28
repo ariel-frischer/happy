@@ -8,7 +8,7 @@
  * ratio is used until the actual image lands and contentFit shows it.
  */
 import * as React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -16,6 +16,8 @@ import { ToolViewProps } from './_all';
 import { z } from 'zod';
 import { useAttachmentImage } from '@/hooks/useAttachmentImage';
 import { thumbhashToDataUri } from '@/utils/thumbhash';
+import { ImageViewerModal } from '@/components/ImageViewerModal';
+import { t } from '@/text';
 
 const fileInputSchema = z.object({
     ref: z.string(),
@@ -35,6 +37,7 @@ const DEFAULT_ASPECT = 4 / 3; // when wire-format omits image{} dimensions
 
 export const FileView = React.memo<ToolViewProps>(({ tool, sessionId }) => {
     const { theme } = useUnistyles();
+    const [viewerOpen, setViewerOpen] = React.useState(false);
     const parsed = fileInputSchema.safeParse(tool.input);
     if (!parsed.success) return null;
 
@@ -66,7 +69,13 @@ export const FileView = React.memo<ToolViewProps>(({ tool, sessionId }) => {
 
     return (
         <View style={styles.inlineContainer}>
-            <View style={styles.inlineWrapper}>
+            <Pressable
+                style={styles.inlineWrapper}
+                onPress={() => setViewerOpen(true)}
+                disabled={!uri}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={t('common.viewImage')}
+            >
                 <Image
                     source={uri ? { uri } : undefined}
                     placeholder={placeholder}
@@ -79,8 +88,9 @@ export const FileView = React.memo<ToolViewProps>(({ tool, sessionId }) => {
                         <Ionicons name="alert-circle-outline" size={20} color={theme.colors.textSecondary} />
                     </View>
                 )}
-            </View>
+            </Pressable>
             <Text style={[styles.filename, { color: theme.colors.textSecondary }]} numberOfLines={1}>{name}</Text>
+            <ImageViewerModal uri={uri} visible={viewerOpen} onClose={() => setViewerOpen(false)} />
         </View>
     );
 });

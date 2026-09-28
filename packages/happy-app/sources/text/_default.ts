@@ -68,6 +68,8 @@ export const en = {
         loadMore: 'Load more',
         delete: 'Delete',
         optional: 'optional',
+        close: 'Close',
+        viewImage: 'View image',
     },
 
     profile: {

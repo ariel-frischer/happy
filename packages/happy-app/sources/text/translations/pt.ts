@@ -68,6 +68,8 @@ export const pt: TranslationStructure = {
         loadMore: 'Carregar mais',
         delete: 'Excluir',
         optional: 'Opcional',
+        close: 'Fechar',
+        viewImage: 'Ver imagem',
     },
 
     profile: {

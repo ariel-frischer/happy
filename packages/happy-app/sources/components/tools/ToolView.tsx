@@ -16,6 +16,7 @@ import { parseToolUseError } from '@/utils/toolErrorParser';
 import { t } from '@/text';
 import {
     formatMCPTitle,
+    getProviderActivityDescription,
     getToolActivityLabel,
     getToolDisplayTitle,
     getToolSummaryCategory,
@@ -80,6 +81,9 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     // This prevents showing raw INPUT/OUTPUT for internal Gemini tools
     // that we haven't explicitly added to knownTools
     const isGemini = props.metadata?.flavor === 'gemini';
+    // omp mirrors a live TUI: the terminal is the place for raw tool text, so
+    // cards stay compact and the full result lives on the detail screen.
+    const isOmp = props.metadata?.flavor === 'omp';
     if (!knownTool && isGemini) {
         minimal = true;
     }
@@ -114,6 +118,10 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
             description = subtitle;
         }
     }
+    // omp computes a concise per-call subtitle ("3 subagents · 2 running").
+    if (isOmp && !description) {
+        description = getProviderActivityDescription(tool, null);
+    }
     if (knownTool && knownTool.minimal !== undefined) {
         if (typeof knownTool.minimal === 'function') {
             minimal = knownTool.minimal({ tool, metadata: props.metadata, messages: props.messages });
@@ -141,6 +149,9 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     }
     if (knownTool && typeof knownTool.hideDefaultError === 'boolean') {
         hideDefaultError = knownTool.hideDefaultError;
+    }
+    if (isOmp) {
+        hideDefaultError = true;
     }
 
     let statusIcon = null;
@@ -285,7 +296,7 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
                 // Show error state if present (but not for denied/canceled permissions and not when hideDefaultError is true)
                 if (tool.state === 'error' && tool.result &&
                     !(tool.permission && (tool.permission.status === 'denied' || tool.permission.status === 'canceled')) &&
-                    !isToolUseError) {
+                    !isToolUseError && !isOmp) {
                     return (
                         <View style={styles.content}>
                             <ToolError message={String(tool.result)} />
@@ -303,7 +314,7 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
                             </ToolSectionView>
                         )}
 
-                        {tool.state === 'completed' && tool.result && (
+                        {tool.state === 'completed' && tool.result && !isOmp && (
                             <ToolSectionView title={t('toolView.output')}>
                                 <CodeView
                                     code={typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}

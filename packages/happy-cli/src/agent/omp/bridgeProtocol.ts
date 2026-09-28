@@ -8,7 +8,7 @@
  */
 import { z } from 'zod';
 
-export const OMP_BRIDGE_PROTOCOL_VERSION = 2;
+export const OMP_BRIDGE_PROTOCOL_VERSION = 3;
 
 const OmpSessionInfoSchema = z.object({
   cwd: z.string(),
@@ -44,6 +44,10 @@ export type OmpAskResultItem = OmpAskAnswer & {
   multi: boolean;
 };
 
+/** omp's ImageContent, minus provider fields: base64 bytes plus MIME type. */
+const OmpImageSchema = z.object({ data: z.string(), mimeType: z.string() });
+export type OmpImage = z.infer<typeof OmpImageSchema>;
+
 /** Extension → bridge. */
 export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   /**
@@ -55,11 +59,24 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   /** omp switched session (/new, /resume, /fork, branch): rotate the Happy session. */
   z.object({ t: z.literal('session'), session: OmpSessionInfoSchema }),
   /** A user message typed in the TUI (phone-originated messages are never echoed). */
-  z.object({ t: z.literal('user'), text: z.string() }),
+  z.object({ t: z.literal('user'), text: z.string(), images: z.array(OmpImageSchema).optional() }),
   /** One finished assistant message. */
   z.object({ t: z.literal('assistant'), text: z.string().optional(), thinking: z.string().optional() }),
-  z.object({ t: z.literal('tool_start'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()) }),
-  z.object({ t: z.literal('tool_end'), id: z.string(), name: z.string(), isError: z.boolean() }),
+  /** `subtitle` is a short omp-specific summary (task progress, eval language, search query…). */
+  z.object({ t: z.literal('tool_start'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string().optional() }),
+  /** A running tool's subtitle changed (e.g. subagent progress). */
+  z.object({ t: z.literal('tool_update'), id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()), subtitle: z.string() }),
+  /** `output` is the tool's text result, already capped; `images` are image blocks of the result. */
+  z.object({
+    t: z.literal('tool_end'),
+    id: z.string(),
+    name: z.string(),
+    isError: z.boolean(),
+    output: z.string().optional(),
+    images: z.array(OmpImageSchema).optional(),
+  }),
+  /** Transient busy detail ("Compacting context…"); no `text` clears it. */
+  z.object({ t: z.literal('activity'), text: z.string().optional() }),
   z.object({
     t: z.literal('status'),
     status: z.enum(['busy', 'idle']),
@@ -84,7 +101,7 @@ export type ExtToBridge = z.infer<typeof ExtToBridgeSchema>;
 export type BridgeToExt =
   | { t: 'ready'; v: number; happySessionId: string | null }
   /** Message typed in the Happy app; deliver with `pi.sendUserMessage`. */
-  | { t: 'user_message'; text: string }
+  | { t: 'user_message'; text: string; images?: OmpImage[] }
   /** Stop button in the app. */
   | { t: 'abort' }
   /** The app answered an `ask` first; resolve the TUI dialog with these results. */

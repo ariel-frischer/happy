@@ -79,6 +79,8 @@ export const pl: TranslationStructure = {
         loadMore: 'Załaduj więcej',
         delete: 'Usuń',
         optional: 'opcjonalnie',
+        close: 'Zamknij',
+        viewImage: 'Pokaż obraz',
     },
 
     profile: {

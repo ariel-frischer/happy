@@ -35,8 +35,8 @@ describe('OmpBridgeMapper', () => {
       { t: 'text', text: 'Checking.' },
       expect.objectContaining({ t: 'tool-call-start', name: 'bash', args: { command: 'ls' } }),
     ]);
-    const end = mapper.map({ t: 'tool_end', id: 'c1', name: 'bash', isError: false }).envelopes;
-    expect(end[0].ev).toEqual({ t: 'tool-call-end', call: (call[1].ev as { call: string }).call });
+    const end = mapper.map({ t: 'tool_end', id: 'c1', name: 'bash', isError: false, output: 'a\nb' }).envelopes;
+    expect(end[0].ev).toEqual({ t: 'tool-call-end', call: (call[1].ev as { call: string }).call, result: 'a\nb', isError: false });
 
     mapper.map({ t: 'assistant', text: 'Done.', thinking: 'looked fine' });
     const idle = mapper.map({ t: 'status', status: 'idle', outcome: 'completed' });
@@ -60,6 +60,20 @@ describe('OmpBridgeMapper', () => {
     expect(formToolUseId).not.toBe('call_1|fc_1');
     expect(card.call).toBe(formToolUseId);
     expect(mapper.sessionCallId('call_2|fc_2')).not.toBe(formToolUseId);
+  });
+
+  it('restates a running tool call under the same card id when its subtitle changes', () => {
+    const mapper = new OmpBridgeMapper();
+    mapper.map({ t: 'status', status: 'busy' });
+
+    const [start] = mapper.map({ t: 'tool_start', id: 't1', name: 'task', args: {}, subtitle: '2 subagents' }).envelopes;
+    const [update] = mapper.map({ t: 'tool_update', id: 't1', name: 'task', args: {}, subtitle: '2 subagents · 1 running' }).envelopes;
+    const [plain] = mapper.map({ t: 'tool_start', id: 't2', name: 'read', args: {} }).envelopes;
+
+    const card = mapper.sessionCallId('t1');
+    expect(start.ev).toMatchObject({ t: 'tool-call-start', call: card, description: '2 subagents' });
+    expect(update.ev).toMatchObject({ t: 'tool-call-start', call: card, description: '2 subagents · 1 running' });
+    expect(plain.ev).toMatchObject({ description: 'Running read' });
   });
 
   it('reports a failed turn with the error text', () => {

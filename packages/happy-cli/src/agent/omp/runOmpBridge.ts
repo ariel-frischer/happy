@@ -13,13 +13,16 @@ import { initialMachineMetadata } from '@/daemon/run';
 import { readCredentials, readSettings } from '@/persistence';
 import { logger } from '@/ui/logger';
 import { connectionState } from '@/utils/serverConnectionErrors';
-import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpSessionInfo } from './bridgeProtocol';
+import { detectImageMime, extensionForImageMime, readImageSize } from '@/utils/imageFormat';
+import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpImage, type OmpSessionInfo } from './bridgeProtocol';
 import { OmpBridgeMapper } from './OmpBridgeMapper';
 import { formAnswersToOmpAsk, ompAskToForm, ompAskToFormAnswers } from './ompAskForm';
 
 const LOG = '[omp-bridge]';
 const KEEP_ALIVE_MS = 2000;
 const PUSH_BODY_MAX = 140;
+/** Total decoded image bytes one app message may hand to omp. */
+const APP_IMAGES_MAX_BYTES = 20 * 1024 * 1024;
 
 type Mirror = {
   session: ApiSessionClient;
@@ -33,6 +36,10 @@ type Mirror = {
   forms: FormCommunicationBridge;
   /** A message from the app arrived since the last finished turn. */
   appTurn: boolean;
+  /** App messages wait for their attachments; this keeps them in order. */
+  inbound: Promise<void>;
+  /** Transient busy detail last written to the agent state. */
+  activity: string | null;
 };
 
 function send(message: BridgeToExt): void {
@@ -41,6 +48,26 @@ function send(message: BridgeToExt): void {
 
 function titleMetadata(title: string | undefined) {
   return title ? { name: title, summary: { text: title, updatedAt: Date.now() } } : {};
+}
+
+/** App attachments a model can read, as omp image blocks; unknown formats are dropped. */
+function toOmpImages(attachments: Array<{ data: Uint8Array; name: string }>): OmpImage[] {
+  const images: OmpImage[] = [];
+  let total = 0;
+  for (const attachment of attachments) {
+    const mimeType = detectImageMime(attachment.data);
+    if (!mimeType) {
+      logger.debug(`${LOG} dropping attachment ${attachment.name}: not a PNG/JPEG/GIF/WebP image`);
+      continue;
+    }
+    total += attachment.data.length;
+    if (total > APP_IMAGES_MAX_BYTES) {
+      logger.debug(`${LOG} dropping attachment ${attachment.name}: message images exceed ${APP_IMAGES_MAX_BYTES} bytes`);
+      break;
+    }
+    images.push({ data: Buffer.from(attachment.data).toString('base64'), mimeType });
+  }
+  return images;
 }
 
 export async function runOmpBridge(): Promise<void> {
@@ -90,12 +117,26 @@ export async function runOmpBridge(): Promise<void> {
   };
 
   const wire = (mirror: Mirror, session: ApiSessionClient) => {
+    session.onFileEvent((fileEvent) => {
+      const ev = fileEvent.content.data.ev;
+      session.trackAttachmentDownload(session.downloadAndDecryptAttachment(ev.ref).then(
+        (data) => (data ? { data, mimeType: ev.mimeType ?? 'image/jpeg', name: ev.name } : null),
+        (error) => {
+          logger.debug(`${LOG} failed to download attachment ${ev.name}:`, error);
+          return null;
+        },
+      ));
+    });
     session.onUserMessage((message) => {
-      const text = message.content.text;
-      if (mirror.closed || !text) return;
-      logger.debug(`${LOG} app message -> omp (${text.length} chars)`);
-      mirror.appTurn = true;
-      send({ t: 'user_message', text });
+      const text = message.content.text ?? '';
+      // Attachments arrive as file events just before their message's text.
+      mirror.inbound = mirror.inbound.then(async () => {
+        const images = toOmpImages(await session.drainAttachmentsForUserMessage());
+        if (mirror.closed || (!text && images.length === 0)) return;
+        logger.debug(`${LOG} app message -> omp (${text.length} chars, ${images.length} images)`);
+        mirror.appTurn = true;
+        send({ t: 'user_message', text, ...(images.length > 0 ? { images } : {}) });
+      }).catch((error) => logger.debug(`${LOG} failed to relay app message:`, error));
     });
     session.rpcHandlerManager.registerHandler('abort', async () => {
       if (!mirror.closed) send({ t: 'abort' });
@@ -136,6 +177,8 @@ export async function runOmpBridge(): Promise<void> {
       asks: new Map(),
       forms: new FormCommunicationBridge(opened.session, LOG),
       appTurn: false,
+      inbound: Promise.resolve(),
+      activity: null,
     };
     mirror = created;
     wire(created, created.session);
@@ -154,6 +197,47 @@ export async function runOmpBridge(): Promise<void> {
       data: { sessionId: mirror.opened.id, provider: 'omp', ...data },
       ...(body ? { body } : {}),
     });
+  };
+
+  /** Uploads an omp image and posts it to the Happy session as a `file` event. */
+  const postImage = async (mirror: Mirror, image: OmpImage, index: number, role: 'user' | 'agent') => {
+    const data = Buffer.from(image.data, 'base64');
+    const size = readImageSize(data);
+    try {
+      const envelope = await mirror.session.uploadLocalImageAttachmentEnvelope(
+        { data, mimeType: image.mimeType, name: `omp-image-${index + 1}.${extensionForImageMime(image.mimeType)}`, ...(size ? { image: size } : {}) },
+        role === 'agent' ? { role, ...mirror.mapper.agentEnvelopeOptions() } : { role },
+      );
+      if (!mirror.closed) mirror.session.sendSessionProtocolMessage(envelope);
+    } catch (error) {
+      logger.debug(`${LOG} failed to upload an omp image:`, error);
+    }
+  };
+
+  const setActivity = (mirror: Mirror, activity: string | null) => {
+    if (mirror.activity === activity) return;
+    mirror.activity = activity;
+    mirror.session.updateAgentState((state) => ({ ...state, activity }));
+  };
+
+  const sendMapped = (mirror: Mirror, event: ExtToBridge) => {
+    const mapped = mirror.mapper.map(event);
+    for (const envelope of mapped.envelopes) {
+      mirror.session.sendSessionProtocolMessage(envelope);
+    }
+    if (mapped.thinking !== undefined && mapped.thinking !== mirror.thinking) {
+      mirror.thinking = mapped.thinking;
+      mirror.session.keepAlive(mirror.thinking, 'remote');
+    }
+    if (mapped.turnEnded) {
+      setActivity(mirror, null);
+      mirror.session.sendSessionEvent({ type: 'ready' });
+      // Like Claude's remote mode: tell the phone a turn it started is done.
+      if (mirror.appTurn && event.t === 'status' && (event.outcome ?? 'completed') === 'completed' && !event.error) {
+        pushNotification(mirror, 'done', { type: 'ready' });
+      }
+      mirror.appTurn = false;
+    }
   };
 
   /** Shows a TUI `ask` in the app; whichever side answers first wins. */
@@ -221,26 +305,27 @@ export async function runOmpBridge(): Promise<void> {
         current?.session.updateMetadata((metadata) => ({ ...metadata, ...titleMetadata(title) }));
         return;
       }
-      default: {
+      case 'user': {
         const mirror = current;
         if (!mirror) return;
-        const mapped = mirror.mapper.map(event);
-        for (const envelope of mapped.envelopes) {
-          mirror.session.sendSessionProtocolMessage(envelope);
-        }
-        if (mapped.thinking !== undefined && mapped.thinking !== mirror.thinking) {
-          mirror.thinking = mapped.thinking;
-          mirror.session.keepAlive(mirror.thinking, 'remote');
-        }
-        if (mapped.turnEnded) {
-          mirror.session.sendSessionEvent({ type: 'ready' });
-          // Like Claude's remote mode: tell the phone a turn it started is done.
-          if (mirror.appTurn && event.t === 'status' && (event.outcome ?? 'completed') === 'completed' && !event.error) {
-            pushNotification(mirror, 'done', { type: 'ready' });
-          }
-          mirror.appTurn = false;
-        }
+        // Like app messages: the pictures first, then the text they go with.
+        for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'user');
+        sendMapped(mirror, event);
+        return;
       }
+      case 'tool_end': {
+        const mirror = current;
+        if (!mirror) return;
+        sendMapped(mirror, event);
+        // Shown right under the tool card they came from.
+        for (const [index, image] of (event.images ?? []).entries()) await postImage(mirror, image, index, 'agent');
+        return;
+      }
+      case 'activity':
+        if (current) setActivity(current, event.text || null);
+        return;
+      default:
+        if (current) sendMapped(current, event);
     }
   };
 

@@ -167,32 +167,57 @@ export class AcpSessionManager {
     }
 
     if (msg.type === 'tool-call') {
-      const flushed = this.flush();
-      const call = this.sessionCallId(msg.callId);
-      this.runningCalls.push(call);
-      return [
-        ...flushed,
-        createEnvelope('agent', {
-          t: 'tool-call-start',
-          call,
-          name: msg.toolName,
-          title: buildToolTitle(msg.toolName),
-          description: buildToolDescription(msg.toolName),
-          args: msg.args,
-        }, turnOptions(this.currentTurnId, this.nextTime())),
-      ];
+      return this.toolCallStart(msg.callId, msg.toolName, msg.args);
     }
 
     if (msg.type === 'tool-result') {
-      const flushed = this.flush();
-      const call = this.sessionCallId(msg.callId);
-      this.runningCalls = this.runningCalls.filter(running => running !== call);
-      return [
-        ...flushed,
-        createEnvelope('agent', { t: 'tool-call-end', call }, turnOptions(this.currentTurnId, this.nextTime())),
-      ];
+      return this.toolCallEnd(msg.callId);
     }
 
     return [];
+  }
+
+  /**
+   * Starts a tool call, or restates a running one: the app merges a repeated
+   * `tool-call-start` for the same call into its card (e.g. a new description).
+   */
+  toolCallStart(acpCallId: string, toolName: string, args: Record<string, unknown>, description?: string): SessionEnvelope[] {
+    const flushed = this.flush();
+    const call = this.sessionCallId(acpCallId);
+    if (!this.runningCalls.includes(call)) {
+      this.runningCalls.push(call);
+    }
+    return [
+      ...flushed,
+      createEnvelope('agent', {
+        t: 'tool-call-start',
+        call,
+        name: toolName,
+        title: buildToolTitle(toolName),
+        description: description || buildToolDescription(toolName),
+        args,
+      }, turnOptions(this.currentTurnId, this.nextTime())),
+    ];
+  }
+
+  /** Ends a tool call; `result` is its text output when the producer mirrors it. */
+  toolCallEnd(acpCallId: string, outcome: { result?: string; isError?: boolean } = {}): SessionEnvelope[] {
+    const flushed = this.flush();
+    const call = this.sessionCallId(acpCallId);
+    this.runningCalls = this.runningCalls.filter(running => running !== call);
+    return [
+      ...flushed,
+      createEnvelope('agent', {
+        t: 'tool-call-end',
+        call,
+        ...(outcome.result !== undefined ? { result: outcome.result } : {}),
+        ...(outcome.isError !== undefined ? { isError: outcome.isError } : {}),
+      }, turnOptions(this.currentTurnId, this.nextTime())),
+    ];
+  }
+
+  /** Envelope options for an agent event in the current turn. */
+  agentEnvelopeOptions(): CreateEnvelopeOptions {
+    return turnOptions(this.currentTurnId, this.nextTime());
   }
 }

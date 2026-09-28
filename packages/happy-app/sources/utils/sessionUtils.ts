@@ -32,6 +32,9 @@ export function useSessionStatus(session: Session): SessionStatus {
     const vibingMessage = React.useMemo(() => {
         return vibingMessages[Math.floor(Math.random() * vibingMessages.length)].toLowerCase() + '…';
     }, [state]);
+    // A transient agent operation ("Compacting context…") replaces the
+    // rotating label while the session is working or idle-but-online.
+    const activity = session.agentState?.activity?.trim() || null;
 
     if (state === 'disconnected') {
         return {
@@ -68,11 +71,11 @@ export function useSessionStatus(session: Session): SessionStatus {
         };
     }
 
-    if (state === 'thinking') {
+    if (state === 'thinking' || (state === 'waiting' && activity)) {
         return {
             state,
             isConnected: true,
-            statusText: vibingMessage,
+            statusText: activity ?? vibingMessage,
             shouldShowStatus: true,
             statusColor: '#007AFF',
             statusDotColor: '#007AFF',

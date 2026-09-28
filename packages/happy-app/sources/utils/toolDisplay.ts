@@ -279,7 +279,7 @@ export function getTerminalToolCommand(tool: Pick<ToolCall, 'name' | 'input'>): 
     return null;
 }
 
-function getProviderActivityDescription(
+export function getProviderActivityDescription(
     tool: Pick<ToolCall, 'name' | 'description'>,
     detail: string | null,
 ): string | null {

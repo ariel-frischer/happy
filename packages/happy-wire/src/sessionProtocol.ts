@@ -54,6 +54,9 @@ export const sessionToolCallStartEventSchema = z.object({
 export const sessionToolCallEndEventSchema = z.object({
   t: z.literal('tool-call-end'),
   call: z.string(),
+  /** Tool text output, when the producer mirrors it (capped by the producer). */
+  result: z.string().optional(),
+  isError: z.boolean().optional(),
 });
 
 export const sessionFileEventSchema = z.object({
@@ -66,7 +69,8 @@ export const sessionFileEventSchema = z.object({
     .object({
       width: z.number(),
       height: z.number(),
-      thumbhash: z.string(),
+      // Optional: producers without a pixel decoder (e.g. the omp bridge) omit it.
+      thumbhash: z.string().optional(),
     })
     .optional(),
 });

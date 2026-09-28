@@ -17,7 +17,7 @@ import {
     retainReconnectCapabilityMonitor,
     shouldReconnect,
 } from '@/utils/lidState';
-import { createEnvelope, type CreateEnvelopeOptions, type SessionEnvelope, type SessionTurnEndStatus } from '@slopus/happy-wire';
+import { createEnvelope, type CreateEnvelopeOptions, type SessionEnvelope, type SessionRole, type SessionTurnEndStatus } from '@slopus/happy-wire';
 import {
     closeClaudeTurnWithStatus,
     mapClaudeLogMessageToSessionEnvelopes,
@@ -25,6 +25,7 @@ import {
 } from '@/claude/utils/sessionProtocolMapper';
 import { InvalidateSync } from '@/utils/sync';
 import axios from 'axios';
+import { extensionForImageMime } from '@/utils/imageFormat';
 
 /**
  * ACP (Agent Communication Protocol) message data types.
@@ -88,25 +89,12 @@ export type LocalImageAttachment = {
     data: Uint8Array;
     mimeType: string;
     name: string;
+    /** Pixel size, when known; lets the app lay the picture out before it loads. */
+    image?: { width: number; height: number };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
-}
-
-function extensionForImageMime(mimeType: string): string {
-    switch (mimeType.toLowerCase()) {
-        case 'image/jpeg':
-        case 'image/jpg':
-            return 'jpg';
-        case 'image/gif':
-            return 'gif';
-        case 'image/webp':
-            return 'webp';
-        case 'image/png':
-        default:
-            return 'png';
-    }
 }
 
 function extractLocalTranscriptImageAttachments(body: RawJSONLines): LocalImageAttachment[] {
@@ -474,22 +462,25 @@ export class ApiSessionClient extends EventEmitter {
         });
     }
 
+    /** Uploads an image and returns its `file` envelope; `role` defaults to the user. */
     async uploadLocalImageAttachmentEnvelope(
         attachment: LocalImageAttachment,
-        opts: Pick<CreateEnvelopeOptions, 'id' | 'time' | 'claudeUuid' | 'codexItemId'> = {},
+        opts: Pick<CreateEnvelopeOptions, 'id' | 'time' | 'turn' | 'claudeUuid' | 'codexItemId'> & { role?: SessionRole } = {},
     ): Promise<SessionEnvelope> {
+        const { role = 'user', ...envelopeOpts } = opts;
         const blobKey = await this.getBlobKey();
         const encrypted = encryptBlob(attachment.data, blobKey);
         const upload = await this.requestAttachmentUpload(attachment.name, encrypted.length);
         await this.uploadEncryptedAttachmentBlob(upload, encrypted);
 
-        return createEnvelope('user', {
+        return createEnvelope(role, {
             t: 'file',
             ref: upload.ref,
             name: attachment.name,
             size: attachment.data.length,
             mimeType: attachment.mimeType,
-        }, opts);
+            ...(attachment.image ? { image: attachment.image } : {}),
+        }, envelopeOpts);
     }
 
     /**

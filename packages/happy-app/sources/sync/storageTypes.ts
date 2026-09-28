@@ -394,6 +394,8 @@ export const AgentStateSchema = z.object({
         toolUseId: z.string().nullish()
     })).nullish(),
     agentGoalStatus: AgentGoalStatusSchema.optional(),
+    // Transient agent operation shown in the status row ("Compacting context…"); null when idle.
+    activity: z.string().nullish(),
 });
 
 export type AgentState = z.infer<typeof AgentStateSchema>;
