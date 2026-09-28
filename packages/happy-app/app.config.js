@@ -207,7 +207,8 @@ export default {
                 }
             ]
         ],
-        updates: {
+        // Sideloaded fork builds must not pull upstream OTA bundles over their own JS.
+        updates: process.env.HAPPY_DISABLE_OTA === '1' ? { enabled: false } : {
             url: "https://u.expo.dev/4558dd3d-cd5a-47cd-bad9-e591a241cc06",
             requestHeaders: {
                 "expo-channel-name": "production"
