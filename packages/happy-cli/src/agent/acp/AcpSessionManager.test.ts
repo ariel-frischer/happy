@@ -412,3 +412,22 @@ describe('AcpSessionManager id consistency', () => {
     expect(isCuid(secondStart.turn!)).toBe(true);
   });
 });
+
+describe('AcpSessionManager running tool calls', () => {
+  it('reports the newest still-running call so an elicitation can link to it', () => {
+    const mapper = new AcpSessionManager();
+    mapper.startTurn();
+    expect(mapper.runningSessionCallId()).toBeUndefined();
+
+    const [read] = mapper.mapMessage({ type: 'tool-call', toolName: 'read', args: {}, callId: 'a' });
+    const [ask] = mapper.mapMessage({ type: 'tool-call', toolName: 'other', args: {}, callId: 'b' });
+    const askCall = (ask.ev as { call: string }).call;
+    expect(mapper.runningSessionCallId()).toBe(askCall);
+
+    mapper.mapMessage({ type: 'tool-result', toolName: 'other', result: {}, callId: 'b' });
+    expect(mapper.runningSessionCallId()).toBe((read.ev as { call: string }).call);
+
+    mapper.endTurn('completed');
+    expect(mapper.runningSessionCallId()).toBeUndefined();
+  });
+});

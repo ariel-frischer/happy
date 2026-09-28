@@ -31,6 +31,7 @@ function parseThinkingPayload(payload: unknown): { text: string; streaming: bool
 export class AcpSessionManager {
   private currentTurnId: string | null = null;
   private readonly acpCallToSessionCall = new Map<string, string>();
+  private runningCalls: string[] = [];
 
   /** Monotonic clock: max(lastTime + 1, Date.now()) */
   private lastTime = 0;
@@ -44,7 +45,12 @@ export class AcpSessionManager {
     return this.lastTime;
   }
 
-  private ensureSessionCallId(acpCallId: string): string {
+  /**
+   * The id the app sees for an agent tool call. Session-protocol call ids are
+   * generated here, so anything else that refers to the call (such as a form
+   * communication's `toolUseId`) must go through this to match the tool card.
+   */
+  sessionCallId(acpCallId: string): string {
     const existing = this.acpCallToSessionCall.get(acpCallId);
     if (existing) {
       return existing;
@@ -53,6 +59,11 @@ export class AcpSessionManager {
     const created = createId();
     this.acpCallToSessionCall.set(acpCallId, created);
     return created;
+  }
+
+  /** The session call id of the most recently started tool call still running. */
+  runningSessionCallId(): string | undefined {
+    return this.runningCalls.at(-1);
   }
 
   private flush(): SessionEnvelope[] {
@@ -80,6 +91,7 @@ export class AcpSessionManager {
 
     this.currentTurnId = createId();
     this.acpCallToSessionCall.clear();
+    this.runningCalls = [];
     return [
       createEnvelope('agent', { t: 'turn-start' }, { turn: this.currentTurnId, time: this.nextTime() }),
     ];
@@ -94,6 +106,7 @@ export class AcpSessionManager {
     const turnId = this.currentTurnId;
     this.currentTurnId = null;
     this.acpCallToSessionCall.clear();
+    this.runningCalls = [];
     return [
       ...flushed,
       createEnvelope('agent', { t: 'turn-end', status }, { turn: turnId, time: this.nextTime() }),
@@ -155,7 +168,8 @@ export class AcpSessionManager {
 
     if (msg.type === 'tool-call') {
       const flushed = this.flush();
-      const call = this.ensureSessionCallId(msg.callId);
+      const call = this.sessionCallId(msg.callId);
+      this.runningCalls.push(call);
       return [
         ...flushed,
         createEnvelope('agent', {
@@ -171,7 +185,8 @@ export class AcpSessionManager {
 
     if (msg.type === 'tool-result') {
       const flushed = this.flush();
-      const call = this.ensureSessionCallId(msg.callId);
+      const call = this.sessionCallId(msg.callId);
+      this.runningCalls = this.runningCalls.filter(running => running !== call);
       return [
         ...flushed,
         createEnvelope('agent', { t: 'tool-call-end', call }, turnOptions(this.currentTurnId, this.nextTime())),

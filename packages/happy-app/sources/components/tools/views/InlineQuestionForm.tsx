@@ -8,7 +8,6 @@ import {
     acceptsWrittenAnswer,
     buildAnswers,
     canSubmit,
-    describeAnswer,
     EMPTY_DRAFT,
     toggleOption,
     type AgentQuestionDraft,
@@ -101,20 +100,7 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
     }, [isSubmitting, onDismiss]);
 
     if (submittedAnswers) {
-        return (
-            <ToolSectionView>
-                <View style={styles.submittedContainer}>
-                    {questions.map(question => (
-                        <View key={question.id} style={styles.submittedItem}>
-                            <Text style={styles.submittedHeader}>{question.header}:</Text>
-                            <Text style={styles.submittedValue}>
-                                {describeAnswer(submittedAnswers[question.id])}
-                            </Text>
-                        </View>
-                    ))}
-                </View>
-            </ToolSectionView>
-        );
+        return <AnsweredQuestions questions={questions} answers={submittedAnswers} />;
     }
 
     return (
@@ -222,6 +208,56 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
                         </TouchableOpacity>
                     </View>
                 )}
+            </View>
+        </ToolSectionView>
+    );
+});
+
+
+/**
+ * A settled form, read-only: every question with the answer given beneath it.
+ * `answers === null` means the request was dismissed without an answer.
+ */
+export const AnsweredQuestions = React.memo((props: {
+    questions: InlineQuestion[];
+    answers: InlineQuestionAnswers | null;
+}) => {
+    const { theme } = useUnistyles();
+    return (
+        <ToolSectionView>
+            <View style={styles.answeredContainer}>
+                {props.questions.map(question => {
+                    const answer = props.answers?.[question.id];
+                    const custom = answer?.custom?.trim();
+                    const hasAnswer = (answer?.options.length ?? 0) > 0 || Boolean(custom);
+                    return (
+                        <View key={question.id} style={styles.questionSection}>
+                            <View style={styles.headerChip}>
+                                <Text style={styles.headerText}>{question.header}</Text>
+                            </View>
+                            <Text style={styles.questionText}>{question.question}</Text>
+                            <View style={styles.answerList}>
+                                {answer?.options.map(option => (
+                                    <View key={option} style={styles.answerRow}>
+                                        <Ionicons name="checkmark-circle" size={16} color={theme.colors.radio.active} style={styles.answerIcon} />
+                                        <Text style={styles.answerText}>{option}</Text>
+                                    </View>
+                                ))}
+                                {custom ? (
+                                    <View style={styles.answerRow}>
+                                        <Ionicons name="create-outline" size={16} color={theme.colors.textSecondary} style={styles.answerIcon} />
+                                        <Text style={styles.answerCustomText}>{custom}</Text>
+                                    </View>
+                                ) : null}
+                                {!hasAnswer && (
+                                    <Text style={styles.answerEmptyText}>
+                                        {props.answers === null ? t('agentQuestion.dismissed') : '—'}
+                                    </Text>
+                                )}
+                            </View>
+                        </View>
+                    );
+                })}
             </View>
         </ToolSectionView>
     );
@@ -384,21 +420,34 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 14,
         fontWeight: '600',
     },
-    submittedContainer: {
-        gap: 8,
+    answeredContainer: {
+        gap: 16,
     },
-    submittedItem: {
+    answerList: {
+        gap: 4,
+    },
+    answerRow: {
         flexDirection: 'row',
+        alignItems: 'flex-start',
         gap: 8,
     },
-    submittedHeader: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
+    answerIcon: {
+        marginTop: 1,
     },
-    submittedValue: {
-        fontSize: 13,
-        color: theme.colors.text,
+    answerText: {
         flex: 1,
+        fontSize: 14,
+        fontWeight: '500',
+        color: theme.colors.text,
+    },
+    answerCustomText: {
+        flex: 1,
+        fontSize: 14,
+        fontStyle: 'italic',
+        color: theme.colors.text,
+    },
+    answerEmptyText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
     },
 }));

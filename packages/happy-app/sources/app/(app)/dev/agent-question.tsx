@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -7,6 +7,7 @@ import { Text } from '@/components/StyledText';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Typography } from '@/constants/Typography';
 import { PendingAgentQuestionCard } from '@/components/PendingAgentQuestions';
+import { AnsweredQuestions } from '@/components/tools/views/InlineQuestionForm';
 import type { PendingAgentForm, PendingUnsupportedCommunication } from '@/sync/agentCommunications';
 
 const formCommunication: PendingAgentForm = {
@@ -64,6 +65,24 @@ export default function AgentQuestionDemoScreen() {
                     <PendingAgentQuestionCard sessionId="demo-session" pending={formCommunication} />
                 </ItemGroup>
 
+                <ItemGroup title="Answered (tool card)">
+                    <View style={styles.answered}>
+                        <AnsweredQuestions
+                            questions={formCommunication.questions}
+                            answers={{
+                                q1: { options: [], custom: 'In a dotfile next to the repo' },
+                                q2: { options: ['Mobile', 'Desktop'] },
+                            }}
+                        />
+                    </View>
+                </ItemGroup>
+
+                <ItemGroup title="Dismissed (tool card)">
+                    <View style={styles.answered}>
+                        <AnsweredQuestions questions={formCommunication.questions} answers={null} />
+                    </View>
+                </ItemGroup>
+
                 <ItemGroup title="Unsupported kind">
                     <PendingAgentQuestionCard sessionId="demo-session" pending={unsupportedCommunication} />
                 </ItemGroup>
@@ -87,5 +106,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 14,
         color: theme.colors.textSecondary,
         ...Typography.default(),
+    },
+    answered: {
+        paddingHorizontal: 12,
+        paddingTop: 8,
     },
 }));

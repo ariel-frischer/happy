@@ -66,18 +66,18 @@ export default React.memo(() => {
                 </View>
             ) : (
                 <Deferred>
-                    <FullView message={message} metadata={session.metadata} focusFile={file ? decodeURIComponent(file) : undefined} />
+                    <FullView message={message} metadata={session.metadata} sessionId={session.id} focusFile={file ? decodeURIComponent(file) : undefined} />
                 </Deferred>
             )}
         </>
     );
 });
 
-function FullView(props: { message: Message; metadata: Metadata | null; focusFile?: string }) {
+function FullView(props: { message: Message; metadata: Metadata | null; sessionId: string; focusFile?: string }) {
     const styles = stylesheet;
     
     if (props.message.kind === 'tool-call') {
-        return <ToolFullView tool={props.message.tool} metadata={props.metadata} messages={props.message.children} focusFile={props.focusFile} />
+        return <ToolFullView tool={props.message.tool} metadata={props.metadata} messages={props.message.children} sessionId={props.sessionId} focusFile={props.focusFile} />
     }
     if (props.message.kind === 'agent-text') {
         return (

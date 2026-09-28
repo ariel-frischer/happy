@@ -201,11 +201,3 @@ export function buildAnswers(
     }
     return answers;
 }
-
-/** One-line summary of an answer, for the collapsed card. */
-export function describeAnswer(answer: AgentQuestionAnswer | undefined): string {
-    if (!answer) return '—';
-    const parts = [...answer.options];
-    if (answer.custom) parts.push(answer.custom);
-    return parts.length > 0 ? parts.join(', ') : '—';
-}

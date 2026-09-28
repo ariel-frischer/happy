@@ -18,6 +18,11 @@ export type OmpMappedEvent = {
 export class OmpBridgeMapper {
   private readonly turns = new AcpSessionManager();
 
+  /** The id the app's tool card uses for an omp tool call. */
+  sessionCallId(ompToolCallId: string): string {
+    return this.turns.sessionCallId(ompToolCallId);
+  }
+
   map(event: ExtToBridge): OmpMappedEvent {
     switch (event.t) {
       case 'user':

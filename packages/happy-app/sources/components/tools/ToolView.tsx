@@ -23,7 +23,8 @@ import {
     shouldRenderToolCardHeader,
     shouldUseCompactToolRow,
 } from '@/utils/toolDisplay';
-import { useSetting } from '@/sync/storage';
+import { useSessionAgentFormCommunication, useSetting } from '@/sync/storage';
+import { AgentFormToolView } from './views/AgentFormToolView';
 
 interface ToolViewProps {
     metadata: Metadata | null;
@@ -39,6 +40,7 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     const router = useRouter();
     const { theme } = useUnistyles();
     const compactToolCalls = useSetting('compactToolCalls');
+    const linkedForm = useSessionAgentFormCommunication(sessionId ?? '', tool.callId ?? '');
 
     // For file-editing tools, navigate to file route instead of message detail
     const fileEditTools = ['Edit', 'MultiEdit', 'Write'];
@@ -176,9 +178,12 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
 
     const terminalCommand = getTerminalToolCommand(tool);
     const isCompactTerminalTool = terminalCommand !== null;
-    const SpecificToolView = getToolViewComponent(tool.name);
+    // A tool that raised an agent form shows the form's questions and answers,
+    // whatever the provider named the tool (ACP reports only a tool kind).
+    const hasLinkedForm = linkedForm !== null;
+    const SpecificToolView = hasLinkedForm ? AgentFormToolView : getToolViewComponent(tool.name);
     const needsApprovalInput = tool.permission?.status === 'pending' && SpecificToolView === null;
-    const isCompactActivityTool = !needsApprovalInput && (shouldUseCompactToolRow(tool, compactToolCalls, SpecificToolView !== null)
+    const isCompactActivityTool = !needsApprovalInput && !hasLinkedForm && (shouldUseCompactToolRow(tool, compactToolCalls, SpecificToolView !== null)
         || minimal
         || isCompactTerminalTool);
     const activityLabel = getToolActivityLabel(tool);

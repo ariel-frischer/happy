@@ -4,7 +4,6 @@ import {
     acceptsWrittenAnswer,
     buildAnswers,
     canSubmit,
-    describeAnswer,
     isQuestionAnswered,
     selectAgentFormCommunication,
     selectPendingCommunications,
@@ -271,14 +270,3 @@ describe('buildAnswers', () => {
     });
 });
 
-describe('describeAnswer', () => {
-    it('joins options and written text', () => {
-        expect(describeAnswer({ options: ['Settings'], custom: 'and more' }))
-            .toBe('Settings, and more');
-    });
-
-    it('falls back to a dash when nothing was answered', () => {
-        expect(describeAnswer(undefined)).toBe('—');
-        expect(describeAnswer({ options: [] })).toBe('—');
-    });
-});

@@ -30,14 +30,18 @@ export class AcpElicitationBridge {
     this.forms.updateSession(session);
   }
 
-  /** Publishes the elicitation to the app and waits for the user's reply. */
-  async request(params: CreateElicitationRequest): Promise<CreateElicitationResponse> {
+  /**
+   * Publishes the elicitation to the app and waits for the user's reply.
+   * `toolUseId` links the form to the tool card that raised it, so the card can
+   * show the answers once the form settles.
+   */
+  async request(params: CreateElicitationRequest, toolUseId?: string): Promise<CreateElicitationResponse> {
     const form = elicitationToForm(params);
     if (!form) {
       logger.debug(`${this.logPrefix} Declining elicitation the app cannot render`, JSON.stringify(params));
       return { action: 'decline' };
     }
-    const reply = await this.forms.open({ title: form.title, questions: form.questions });
+    const reply = await this.forms.open({ title: form.title, questions: form.questions, ...(toolUseId ? { toolUseId } : {}) });
     return reply.status === 'answered' ? answersToElicitationResponse(form, reply.answers) : CANCELLED_ELICITATION;
   }
 

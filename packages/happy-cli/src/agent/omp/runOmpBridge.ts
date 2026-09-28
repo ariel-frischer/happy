@@ -160,7 +160,10 @@ export async function runOmpBridge(): Promise<void> {
   const openAsk = (mirror: Mirror, id: string, questions: OmpAskQuestion[], toolCallId: string | undefined) => {
     mirror.asks.set(id, questions);
     const form = ompAskToForm(questions);
-    void mirror.forms.open({ ...form, ...(toolCallId ? { toolUseId: toolCallId } : {}) }, id).then((reply) => {
+    // The tool card carries the session-protocol call id, not omp's, so link
+    // the form through the mapper or its answers never reach the card.
+    const toolUseId = toolCallId ? mirror.mapper.sessionCallId(toolCallId) : undefined;
+    void mirror.forms.open({ ...form, ...(toolUseId ? { toolUseId } : {}) }, id).then((reply) => {
       // Not pending any more: the TUI settled first or the mirror closed.
       if (!mirror.asks.delete(id) || mirror.closed) return;
       if (reply.status === 'answered') {

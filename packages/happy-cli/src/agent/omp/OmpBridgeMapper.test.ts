@@ -48,6 +48,20 @@ describe('OmpBridgeMapper', () => {
     expect([...call, ...end, ...idle.envelopes].every((e) => e.turn === turn)).toBe(true);
   });
 
+  it('links an ask to the call id its tool card carries, whichever arrives first', () => {
+    const mapper = new OmpBridgeMapper();
+    mapper.map({ t: 'status', status: 'busy' });
+
+    // omp reports the ask (tool_call) before the tool starts executing.
+    const formToolUseId = mapper.sessionCallId('call_1|fc_1');
+    const call = mapper.map({ t: 'tool_start', id: 'call_1|fc_1', name: 'ask', args: {} }).envelopes;
+    const card = call.find((e) => e.ev.t === 'tool-call-start')!.ev as { call: string };
+
+    expect(formToolUseId).not.toBe('call_1|fc_1');
+    expect(card.call).toBe(formToolUseId);
+    expect(mapper.sessionCallId('call_2|fc_2')).not.toBe(formToolUseId);
+  });
+
   it('reports a failed turn with the error text', () => {
     const mapper = new OmpBridgeMapper();
     mapper.map({ t: 'status', status: 'busy' });

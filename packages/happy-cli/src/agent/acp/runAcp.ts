@@ -523,7 +523,9 @@ export async function runAcp(opts: {
     args: opts.args,
     mcpServers,
     permissionHandler,
-    elicitationHandler: (request) => elicitationBridge.request(request),
+    // ACP elicitations carry no tool call id; the one raising the form is the
+    // tool still running when it arrives (e.g. omp's `ask`).
+    elicitationHandler: (request) => elicitationBridge.request(request, sessionManager.runningSessionCallId()),
     transportHandler: new DefaultTransport(opts.agentName),
     verbose,
   });

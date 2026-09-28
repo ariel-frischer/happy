@@ -8,7 +8,8 @@ import { getToolDisplayTitle, getToolSummaryCategory, isTerminalToolName } from 
 import { toolResultText } from '@/utils/toolResult';
 import { getToolFullViewComponent } from './views/_all';
 import { layout } from '../layout';
-import { useLocalSetting } from '@/sync/storage';
+import { useLocalSetting, useSessionAgentFormCommunication } from '@/sync/storage';
+import { AgentFormToolView } from './views/AgentFormToolView';
 import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
 import { ToolError } from './ToolError';
@@ -20,9 +21,26 @@ interface ToolFullViewProps {
     messages?: Message[];
     /** Show only this file, for when the user tapped one diff out of many. */
     focusFile?: string;
+    sessionId?: string;
 }
 
-export function ToolFullView({ tool, metadata, messages = [], focusFile }: ToolFullViewProps) {
+export function ToolFullView({ tool, metadata, messages = [], focusFile, sessionId }: ToolFullViewProps) {
+    const linkedForm = useSessionAgentFormCommunication(sessionId ?? '', tool.callId ?? '');
+    if (linkedForm) {
+        // A tool that raised an agent form is the question and its answer; its
+        // raw input and result would only repeat that as JSON.
+        return (
+            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+                <View style={[styles.contentWrapper, styles.readableContent]}>
+                    <AgentFormToolView tool={tool} metadata={metadata || null} messages={messages} sessionId={sessionId} />
+                </View>
+            </ScrollView>
+        );
+    }
+    return <ToolFullViewContent tool={tool} metadata={metadata} messages={messages} focusFile={focusFile} />;
+}
+
+function ToolFullViewContent({ tool, metadata, messages = [], focusFile }: ToolFullViewProps) {
     // Check if there's a specialized content view for this tool
     const SpecializedFullView = getToolFullViewComponent(tool.name);
     const screenWidth = useWindowDimensions().width;
