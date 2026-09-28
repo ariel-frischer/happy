@@ -110,6 +110,7 @@ vi.mock('./RoundButton', async () => {
     const ReactModule = await import('react');
     return { RoundButton: (props: any) => ReactModule.createElement('RoundButton', props) };
 });
+vi.mock('./PendingAgentQuestions', () => ({ PendingAgentQuestions: () => null }));
 vi.mock('@/sync/controlHandoff', () => ({ resolveControlMode: () => 'agent' }));
 vi.mock('@/sync/rig', () => ({ usesControlledSessionUi: () => false }));
 vi.mock('@/utils/agentTurnCopy', () => ({ buildAgentTurnCopyTextByMessageId: () => new Map() }));

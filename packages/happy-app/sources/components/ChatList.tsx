@@ -10,6 +10,7 @@ import { MessageView } from './MessageView';
 import { AgentWorkGroupHeader } from './AgentWorkGroupHeader';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
+import { PendingAgentQuestions } from './PendingAgentQuestions';
 import { Message } from '@/sync/typesMessage';
 import { AgentWorkGroupItem, DisplayItem, TextItem, useGroupedMessages } from '@/hooks/useGroupedMessages';
 import { Octicons } from '@expo/vector-icons';
@@ -232,11 +233,17 @@ const OlderEnd = React.memo((props: { status: 'idle' | 'loading' | 'error' | 'lo
     );
 });
 
-/** Renders just past the newest message, so the list's header when inverted. */
+/**
+ * Renders just past the newest message, so the list's header when inverted.
+ * Pending agent questions live here, below the message that raised them.
+ */
 const NewerEnd = React.memo((props: { sessionId: string }) => {
     const session = useSession(props.sessionId)!;
     return (
-        <ChatFooter controlledByUser={usesControlledSessionUi(session.metadata) && (session.agentState?.controlledByUser || false)} />
+        <View>
+            <PendingAgentQuestions sessionId={props.sessionId} />
+            <ChatFooter controlledByUser={usesControlledSessionUi(session.metadata) && (session.agentState?.controlledByUser || false)} />
+        </View>
     )
 });
 

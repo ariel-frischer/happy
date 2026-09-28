@@ -15,7 +15,7 @@ import { CodexBashView } from './CodexBashView';
 import { CodexPatchView, CodexPatchViewFull } from './CodexPatchView';
 import { CodexDiffView, CodexDiffViewFull } from './CodexDiffView';
 import { AskUserQuestionView } from './AskUserQuestionView';
-import { RequestUserInputView } from './RequestUserInputView';
+import { AgentFormToolView } from './AgentFormToolView';
 import { GeminiEditView } from './GeminiEditView';
 import { GeminiExecuteView } from './GeminiExecuteView';
 import { FileView } from './FileView';
@@ -51,7 +51,9 @@ export const toolViewRegistry: Record<string, ToolViewComponent> = {
     Task: TaskView,
     Agent: TaskView,
     AskUserQuestion: AskUserQuestionView,
-    request_user_input: RequestUserInputView,
+    request_user_input: AgentFormToolView,
+    // omp's ask tool, mirrored by the Happy omp bridge.
+    ask: AgentFormToolView,
     // Gemini tools (lowercase)
     edit: GeminiEditView,
     execute: GeminiExecuteView,
@@ -106,7 +108,7 @@ export { ExitPlanToolView } from './ExitPlanToolView';
 export { MultiEditView } from './MultiEditView';
 export { TaskView } from './TaskView';
 export { AskUserQuestionView } from './AskUserQuestionView';
-export { RequestUserInputView } from './RequestUserInputView';
+export { AgentFormToolView } from './AgentFormToolView';
 export { GeminiEditView } from './GeminiEditView';
 export { GeminiExecuteView } from './GeminiExecuteView';
 export { FileView } from './FileView';

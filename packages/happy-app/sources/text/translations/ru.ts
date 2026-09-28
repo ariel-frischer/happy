@@ -559,16 +559,12 @@ export const ru: TranslationStructure = {
 
     agentQuestion: {
         title: "Вопрос",
-        submit: "Отправить ответ",
-        chooseMultiple: "Выберите все подходящие",
         ownAnswer: "Свой ответ",
         ownAnswerPlaceholder: "Напишите свой ответ",
         submitFailed: "Не удалось отправить ответ",
         dismiss: "Скрыть",
         unsupportedTitle: "Неподдерживаемый запрос",
         unsupportedDescription: ({ kind }: { kind: string }) => `Эта версия Happy не может показать запрос «${kind}». Обновите приложение, чтобы ответить.`,
-        moreQuestions: ({ count }: { count: number }) =>
-            count === 1 ? "ещё 1 вопрос" : `${count} вопросов ещё`,
     },
 
     sidebar: {

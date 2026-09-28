@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    acceptsWrittenAnswer,
     buildAnswers,
     canSubmit,
     describeAnswer,
     isQuestionAnswered,
-    canRenderAgentFormInline,
-    shouldUseAgentQuestionFallback,
     selectAgentFormCommunication,
     selectPendingCommunications,
     toggleOption,
+    type PendingAgentForm,
 } from './agentCommunications';
 import type { AgentQuestion, AgentState } from './storageTypes';
 
@@ -162,48 +162,32 @@ describe('selectAgentFormCommunication', () => {
     });
 });
 
-describe('canRenderAgentFormInline', () => {
-    it('accepts choice forms and keeps text-only forms on the modal fallback', () => {
-        expect(canRenderAgentFormInline({
-            id: 'choice',
-            createdAt: 0,
-            kind: 'form',
-            questions: [question()],
-        })).toBe(true);
-
-        expect(canRenderAgentFormInline({
-            id: 'text',
-            createdAt: 0,
-            kind: 'form',
-            questions: [question({ options: [], allowCustom: true })],
-        })).toBe(false);
+describe('acceptsWrittenAnswer', () => {
+    it('adds a text field only where the agent accepts a written answer', () => {
+        expect(acceptsWrittenAnswer(question())).toBe(false);
+        expect(acceptsWrittenAnswer(question({ allowCustom: false }))).toBe(false);
+        expect(acceptsWrittenAnswer(question({ allowCustom: true }))).toBe(true);
+        expect(acceptsWrittenAnswer(question({ options: [] }))).toBe(true);
     });
+});
 
-    it('assigns choice forms to the transcript before their tool message arrives', () => {
-        expect(shouldUseAgentQuestionFallback({
-            id: 'choice',
-            createdAt: 0,
-            kind: 'form',
-            questions: [question()],
-        })).toBe(false);
+describe('pending forms that accept an "Other" answer', () => {
+    it('are surfaced with their options and custom-answer flag intact', () => {
+        // Shape published by the omp bridge and ACP elicitation: choices plus "Other".
+        const pending = selectPendingCommunications(state({
+            'ask-1': {
+                kind: 'form',
+                createdAt: 1,
+                toolUseId: 'tool-ask-1',
+                form: { questions: [question({ allowCustom: true }), question({ id: 'q2', options: [], allowCustom: true })] },
+            },
+        }));
 
-        expect(shouldUseAgentQuestionFallback({
-            id: 'text',
-            createdAt: 0,
-            kind: 'form',
-            questions: [question({ options: [], allowCustom: true })],
-        })).toBe(true);
-    });
-
-    it('keeps choice forms that accept a written answer on the modal fallback', () => {
-        const withOther = {
-            id: 'other',
-            createdAt: 0,
-            kind: 'form' as const,
-            questions: [question(), question({ id: 'q2', allowCustom: true })],
-        };
-        expect(canRenderAgentFormInline(withOther)).toBe(false);
-        expect(shouldUseAgentQuestionFallback(withOther)).toBe(true);
+        expect(pending).toHaveLength(1);
+        const form = pending[0] as PendingAgentForm;
+        expect(form.kind).toBe('form');
+        expect(form.toolUseId).toBe('tool-ask-1');
+        expect(form.questions.map(acceptsWrittenAnswer)).toEqual([true, true]);
     });
 });
 
@@ -274,6 +258,12 @@ describe('buildAnswers', () => {
         expect(buildAnswers([question({ multiSelect: true })], {
             q1: { options: ['Settings', 'Locally'], custom: '' },
         })).toEqual({ q1: { options: ['Settings', 'Locally'] } });
+    });
+
+    it('sends an "Other" answer on its own when no option was chosen', () => {
+        expect(buildAnswers([question({ allowCustom: true })], {
+            q1: { options: [], custom: 'Somewhere else' },
+        })).toEqual({ q1: { options: [], custom: 'Somewhere else' } });
     });
 
     it('drops questions the user left blank', () => {

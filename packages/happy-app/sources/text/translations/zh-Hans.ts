@@ -544,16 +544,12 @@ export const zhHans: TranslationStructure = {
 
     agentQuestion: {
         title: "问题",
-        submit: "发送回答",
-        chooseMultiple: "选择所有适用项",
         ownAnswer: "自定义回答",
         ownAnswerPlaceholder: "输入你的回答",
         submitFailed: "无法发送你的回答",
         dismiss: "忽略",
         unsupportedTitle: "不支持的请求",
         unsupportedDescription: ({ kind }: { kind: string }) => `此版本的 Happy 无法显示「${kind}」请求。请更新应用后回复。`,
-        moreQuestions: ({ count }: { count: number }) =>
-            count === 1 ? "还有 1 个问题" : `${count} 个问题`,
     },
 
     sidebar: {

@@ -973,6 +973,24 @@ export const knownTools = {
             return typeof firstQuestion?.question === 'string' ? firstQuestion.question : null;
         }
     },
+    // omp's ask tool (mirrored by the Happy omp bridge); args follow omp's schema.
+    'ask': {
+        title: t('tools.names.question'),
+        icon: ICON_QUESTION,
+        minimal: false,
+        noStatus: true,
+        input: z.object({
+            questions: z.array(z.object({
+                question: z.string().optional(),
+            }).passthrough()).optional(),
+        }).partial().passthrough(),
+        extractSubtitle: (opts: { metadata: Metadata | null, tool: ToolCall }) => {
+            const questions = opts.tool.input?.questions;
+            if (!Array.isArray(questions) || questions.length === 0) return null;
+            if (questions.length > 1) return t('tools.askUserQuestion.multipleQuestions', { count: questions.length });
+            return typeof questions[0]?.question === 'string' ? questions[0].question : null;
+        }
+    },
     // Internal Claude Code tool for loading deferred tools - no user-visible output
     'Skill': {
         icon: ICON_TASK,

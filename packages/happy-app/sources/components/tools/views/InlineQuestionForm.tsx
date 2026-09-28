@@ -1,102 +1,104 @@
 import * as React from 'react';
-import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { t } from '@/text';
+import {
+    acceptsWrittenAnswer,
+    buildAnswers,
+    canSubmit,
+    describeAnswer,
+    EMPTY_DRAFT,
+    toggleOption,
+    type AgentQuestionDraft,
+} from '@/sync/agentCommunications';
+import type { AgentQuestion, AgentQuestionAnswer } from '@/sync/storageTypes';
 import { ToolSectionView } from '../ToolSectionView';
 
-export interface InlineQuestionOption {
-    label: string;
-    description?: string | null;
-}
+export type InlineQuestion = AgentQuestion;
 
-export interface InlineQuestion {
-    id: string;
-    question: string;
-    header: string;
-    options: InlineQuestionOption[];
-    multiSelect?: boolean | null;
-    required?: boolean | null;
-}
-
-export type InlineQuestionAnswers = Record<string, string[]>;
+export type InlineQuestionAnswers = Record<string, AgentQuestionAnswer>;
 
 interface InlineQuestionFormProps {
     questions: InlineQuestion[];
     canInteract: boolean;
     submittedAnswers?: InlineQuestionAnswers | null;
     onSubmit: (answers: InlineQuestionAnswers) => Promise<void>;
+    /** Shows a Dismiss button that declines the whole request. */
+    onDismiss?: () => Promise<void>;
 }
 
-// This is the shared choice form used by both Claude's AskUserQuestion tool and
-// agent communications such as Codex/Happy request_user_input. Transport and
-// answer payload differences stay in the small wrappers around this view.
+// This is the shared question form used by Claude's AskUserQuestion tool and by
+// agent communications (Codex/Happy request_user_input, ACP elicitation, omp
+// ask). Every question is visible and editable until Submit; a question that
+// accepts a written answer also gets a text field. Transport and answer
+// payload differences stay in the small wrappers around this view.
 export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) => {
-    const { questions, onSubmit } = props;
+    const { questions, onSubmit, onDismiss } = props;
     const { theme } = useUnistyles();
-    const [selections, setSelections] = React.useState<Map<string, Set<number>>>(new Map());
+    const [drafts, setDrafts] = React.useState<Record<string, AgentQuestionDraft>>({});
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
     const [locallySubmittedAnswers, setLocallySubmittedAnswers] = React.useState<InlineQuestionAnswers | null>(null);
     const questionKey = questions.map(question => question.id).join('\u0000');
 
     React.useEffect(() => {
-        setSelections(new Map());
+        setDrafts({});
         setLocallySubmittedAnswers(null);
         setIsSubmitting(false);
+        setError(null);
     }, [questionKey]);
 
     const submittedAnswers = props.submittedAnswers ?? locallySubmittedAnswers;
-    const canInteract = props.canInteract && submittedAnswers === null;
-    const allQuestionsAnswered = questions.every((question) => {
-        if (question.required === false) return true;
-        return (selections.get(question.id)?.size ?? 0) > 0;
-    });
+    const canInteract = props.canInteract && submittedAnswers === null && !isSubmitting;
+    const ready = canSubmit(questions, drafts);
 
-    const handleOptionToggle = React.useCallback((question: InlineQuestion, optionIndex: number) => {
+    const handleOptionToggle = React.useCallback((question: InlineQuestion, label: string) => {
         if (!canInteract) return;
-
-        setSelections(previous => {
-            const next = new Map(previous);
-            const current = previous.get(question.id) ?? new Set<number>();
-            if (question.multiSelect) {
-                const selected = new Set(current);
-                if (selected.has(optionIndex)) {
-                    selected.delete(optionIndex);
-                } else {
-                    selected.add(optionIndex);
-                }
-                next.set(question.id, selected);
-            } else {
-                next.set(question.id, new Set([optionIndex]));
-            }
-            return next;
-        });
+        setDrafts(previous => ({
+            ...previous,
+            [question.id]: toggleOption(previous[question.id] ?? EMPTY_DRAFT, label, question.multiSelect === true),
+        }));
     }, [canInteract]);
 
+    const handleCustomChange = React.useCallback((questionId: string, custom: string) => {
+        setDrafts(previous => ({
+            ...previous,
+            [questionId]: { ...(previous[questionId] ?? EMPTY_DRAFT), custom },
+        }));
+    }, []);
+
     const handleSubmit = React.useCallback(async () => {
-        if (!allQuestionsAnswered || isSubmitting) return;
+        if (!ready || isSubmitting) return;
 
-        const answers: InlineQuestionAnswers = {};
-        for (const question of questions) {
-            const selected = selections.get(question.id);
-            if (!selected || selected.size === 0) continue;
-            answers[question.id] = Array.from(selected)
-                .map(optionIndex => question.options[optionIndex]?.label)
-                .filter((label): label is string => Boolean(label));
-        }
-
+        const answers = buildAnswers(questions, drafts);
         setIsSubmitting(true);
+        setError(null);
         setLocallySubmittedAnswers(answers);
         try {
             await onSubmit(answers);
-        } catch (error) {
+        } catch (submitError) {
+            // Put the form back with the drafts intact so the user can retry.
             setLocallySubmittedAnswers(null);
-            console.error('Failed to submit question answer:', error);
+            setError(submitError instanceof Error ? submitError.message : t('agentQuestion.submitFailed'));
         } finally {
             setIsSubmitting(false);
         }
-    }, [allQuestionsAnswered, isSubmitting, onSubmit, questions, selections]);
+    }, [drafts, isSubmitting, onSubmit, questions, ready]);
+
+    const handleDismiss = React.useCallback(async () => {
+        if (!onDismiss || isSubmitting) return;
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            await onDismiss();
+        } catch (dismissError) {
+            setError(dismissError instanceof Error ? dismissError.message : t('agentQuestion.submitFailed'));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [isSubmitting, onDismiss]);
 
     if (submittedAnswers) {
         return (
@@ -106,7 +108,7 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
                         <View key={question.id} style={styles.submittedItem}>
                             <Text style={styles.submittedHeader}>{question.header}:</Text>
                             <Text style={styles.submittedValue}>
-                                {submittedAnswers[question.id]?.join(', ') || '—'}
+                                {describeAnswer(submittedAnswers[question.id])}
                             </Text>
                         </View>
                     ))}
@@ -119,67 +121,94 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
         <ToolSectionView>
             <View style={styles.container}>
                 {questions.map(question => {
-                    const selectedOptions = selections.get(question.id) ?? new Set<number>();
+                    const draft = drafts[question.id] ?? EMPTY_DRAFT;
                     return (
                         <View key={question.id} style={styles.questionSection}>
                             <View style={styles.headerChip}>
                                 <Text style={styles.headerText}>{question.header}</Text>
                             </View>
                             <Text style={styles.questionText}>{question.question}</Text>
-                            <View style={styles.optionsContainer}>
-                                {question.options.map((option, optionIndex) => {
-                                    const isSelected = selectedOptions.has(optionIndex);
-                                    return (
-                                        <TouchableOpacity
-                                            key={`${question.id}:${optionIndex}`}
-                                            style={[
-                                                styles.optionButton,
-                                                isSelected && styles.optionButtonSelected,
-                                                !canInteract && styles.optionButtonDisabled,
-                                            ]}
-                                            onPress={() => handleOptionToggle(question, optionIndex)}
-                                            disabled={!canInteract}
-                                            activeOpacity={0.7}
-                                        >
-                                            {question.multiSelect ? (
-                                                <View style={[
-                                                    styles.checkboxOuter,
-                                                    isSelected && styles.checkboxOuterSelected,
-                                                ]}>
-                                                    {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                            {question.options.length > 0 && (
+                                <View style={styles.optionsContainer}>
+                                    {question.options.map((option, optionIndex) => {
+                                        const isSelected = draft.options.includes(option.label);
+                                        return (
+                                            <TouchableOpacity
+                                                key={`${question.id}:${optionIndex}`}
+                                                style={[
+                                                    styles.optionButton,
+                                                    isSelected && styles.optionButtonSelected,
+                                                    !canInteract && styles.optionButtonDisabled,
+                                                ]}
+                                                onPress={() => handleOptionToggle(question, option.label)}
+                                                disabled={!canInteract}
+                                                activeOpacity={0.7}
+                                            >
+                                                {question.multiSelect ? (
+                                                    <View style={[
+                                                        styles.checkboxOuter,
+                                                        isSelected && styles.checkboxOuterSelected,
+                                                    ]}>
+                                                        {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                                                    </View>
+                                                ) : (
+                                                    <View style={[
+                                                        styles.radioOuter,
+                                                        isSelected && styles.radioOuterSelected,
+                                                    ]}>
+                                                        {isSelected && <View style={styles.radioInner} />}
+                                                    </View>
+                                                )}
+                                                <View style={styles.optionContent}>
+                                                    <Text style={styles.optionLabel}>{option.label}</Text>
+                                                    {option.description ? (
+                                                        <Text style={styles.optionDescription}>{option.description}</Text>
+                                                    ) : null}
                                                 </View>
-                                            ) : (
-                                                <View style={[
-                                                    styles.radioOuter,
-                                                    isSelected && styles.radioOuterSelected,
-                                                ]}>
-                                                    {isSelected && <View style={styles.radioInner} />}
-                                                </View>
-                                            )}
-                                            <View style={styles.optionContent}>
-                                                <Text style={styles.optionLabel}>{option.label}</Text>
-                                                {option.description ? (
-                                                    <Text style={styles.optionDescription}>{option.description}</Text>
-                                                ) : null}
-                                            </View>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            )}
+                            {acceptsWrittenAnswer(question) && (
+                                <TextInput
+                                    style={[styles.customInput, !canInteract && styles.optionButtonDisabled]}
+                                    value={draft.custom}
+                                    onChangeText={value => handleCustomChange(question.id, value)}
+                                    placeholder={question.options.length > 0
+                                        ? t('agentQuestion.ownAnswerPlaceholder')
+                                        : t('agentQuestion.ownAnswer')}
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    multiline
+                                    editable={canInteract}
+                                />
+                            )}
                         </View>
                     );
                 })}
 
-                {canInteract && (
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                {props.canInteract && (
                     <View style={styles.actionsContainer}>
+                        {onDismiss && (
+                            <TouchableOpacity
+                                style={[styles.dismissButton, isSubmitting && styles.submitButtonDisabled]}
+                                onPress={handleDismiss}
+                                disabled={isSubmitting}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.dismissButtonText}>{t('agentQuestion.dismiss')}</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                             style={[
                                 styles.submitButton,
-                                allQuestionsAnswered && !isSubmitting && styles.submitButtonReady,
-                                (!allQuestionsAnswered || isSubmitting) && styles.submitButtonDisabled,
+                                ready && !isSubmitting && styles.submitButtonReady,
+                                (!ready || isSubmitting) && styles.submitButtonDisabled,
                             ]}
                             onPress={handleSubmit}
-                            disabled={!allQuestionsAnswered || isSubmitting}
+                            disabled={!ready || isSubmitting}
                             activeOpacity={0.7}
                         >
                             {isSubmitting ? (
@@ -299,6 +328,37 @@ const styles = StyleSheet.create((theme) => ({
         gap: 12,
         marginTop: 8,
         justifyContent: 'flex-end',
+    },
+    customInput: {
+        minHeight: 44,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.divider,
+        backgroundColor: Platform.select({ web: 'transparent', default: theme.colors.surface }),
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 14,
+        color: theme.colors.text,
+        textAlignVertical: 'top',
+    },
+    errorText: {
+        fontSize: 13,
+        color: theme.colors.warning,
+    },
+    dismissButton: {
+        borderWidth: 1,
+        borderColor: theme.colors.divider,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+    },
+    dismissButtonText: {
+        color: theme.colors.textSecondary,
+        fontSize: 14,
+        fontWeight: '600',
     },
     submitButton: {
         backgroundColor: Platform.select({ web: theme.colors.button.primary.background, default: theme.colors.surfaceHighest }),

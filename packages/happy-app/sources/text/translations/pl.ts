@@ -559,16 +559,12 @@ export const pl: TranslationStructure = {
 
     agentQuestion: {
         title: "Pytanie",
-        submit: "Wyślij odpowiedź",
-        chooseMultiple: "Wybierz wszystkie pasujące",
         ownAnswer: "Własna odpowiedź",
         ownAnswerPlaceholder: "Wpisz odpowiedź",
         submitFailed: "Nie udało się wysłać odpowiedzi",
         dismiss: "Odrzuć",
         unsupportedTitle: "Nieobsługiwane żądanie",
         unsupportedDescription: ({ kind }: { kind: string }) => `Ta wersja Happy nie może pokazać żądania «${kind}». Zaktualizuj aplikację, aby odpowiedzieć.`,
-        moreQuestions: ({ count }: { count: number }) =>
-            count === 1 ? "jeszcze 1 pytanie" : `${count} pytań więcej`,
     },
 
     sidebar: {

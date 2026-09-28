@@ -1,13 +1,12 @@
 import React from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { ScrollView } from 'react-native';
+import { Stack } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { Text } from '@/components/StyledText';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Typography } from '@/constants/Typography';
-import { AgentQuestionBannerView } from '@/components/AgentQuestionBanner';
-import { AgentQuestionModal } from '@/components/AgentQuestionModal';
+import { PendingAgentQuestionCard } from '@/components/PendingAgentQuestions';
 import type { PendingAgentForm, PendingUnsupportedCommunication } from '@/sync/agentCommunications';
 
 const formCommunication: PendingAgentForm = {
@@ -20,6 +19,7 @@ const formCommunication: PendingAgentForm = {
             header: 'Storage',
             question: 'Where should the project order live?',
             multiSelect: false,
+            allowCustom: true,
             options: [
                 { label: 'In settings', description: 'Synced to every device you sign in from' },
                 { label: 'On this device', description: 'Stays local, never leaves the phone' },
@@ -49,47 +49,25 @@ const unsupportedCommunication: PendingUnsupportedCommunication = {
 
 export default function AgentQuestionDemoScreen() {
     const styles = stylesheet;
-    // ?open=1 opens the sheet straight away, so it can be linked to and captured directly.
-    const params = useLocalSearchParams<{ open?: string }>();
-    const [open, setOpen] = React.useState(params.open === '1');
 
     return (
         <>
             <Stack.Screen options={{ headerTitle: 'Agent Questions' }} />
             <ScrollView style={styles.container} contentContainerStyle={styles.content}>
                 <Text style={styles.description}>
-                    Agent-to-user communications. A form opens the full-screen answer sheet; a kind
-                    this build does not implement says so and offers to dismiss it.
+                    Agent-to-user communications, as they render at the end of the chat. A form is
+                    answered in place; a kind this build does not implement says so and offers to
+                    dismiss it.
                 </Text>
 
-                <ItemGroup title="Banner — form">
-                    <View style={styles.preview}>
-                        <AgentQuestionBannerView
-                            pending={formCommunication}
-                            onPress={() => setOpen(true)}
-                        />
-                    </View>
+                <ItemGroup title="Form">
+                    <PendingAgentQuestionCard sessionId="demo-session" pending={formCommunication} />
                 </ItemGroup>
 
-                <ItemGroup title="Banner — unsupported kind">
-                    <View style={styles.preview}>
-                        <AgentQuestionBannerView pending={unsupportedCommunication} />
-                    </View>
-                </ItemGroup>
-
-                <ItemGroup title="Full-screen form">
-                    <Pressable style={styles.button} onPress={() => setOpen(true)}>
-                        <Text style={styles.buttonText}>Open the answer sheet</Text>
-                    </Pressable>
+                <ItemGroup title="Unsupported kind">
+                    <PendingAgentQuestionCard sessionId="demo-session" pending={unsupportedCommunication} />
                 </ItemGroup>
             </ScrollView>
-
-            <AgentQuestionModal
-                pending={formCommunication}
-                sessionId="demo-session"
-                visible={open}
-                onClose={() => setOpen(false)}
-            />
         </>
     );
 }
@@ -109,21 +87,5 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 14,
         color: theme.colors.textSecondary,
         ...Typography.default(),
-    },
-    preview: {
-        paddingVertical: 8,
-    },
-    button: {
-        margin: 12,
-        height: 48,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.textLink,
-    },
-    buttonText: {
-        fontSize: 16,
-        color: '#fff',
-        ...Typography.default('semiBold'),
     },
 }));

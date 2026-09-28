@@ -34,8 +34,8 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
         questions.forEach((question, index) => {
             const originalQuestion = input?.questions?.[index];
             const selected = answers[question.id];
-            if (originalQuestion && selected?.length) {
-                providerAnswers[originalQuestion.question] = selected.join(', ');
+            if (originalQuestion && selected?.options.length) {
+                providerAnswers[originalQuestion.question] = selected.options.join(', ');
             }
         });
 

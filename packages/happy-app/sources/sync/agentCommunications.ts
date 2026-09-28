@@ -125,23 +125,12 @@ export function selectAgentFormCommunication(
 }
 
 /**
- * Choice forms can live directly in chat. The inline card has no free-text
- * field, so text-only questions and questions that explicitly accept a
- * written answer (e.g. an agent's "Other" choice) keep the modal fallback.
+ * Whether a question gets a free-text field next to its options. Agents opt in
+ * with `allowCustom` (an "Other" answer); a question with no options can only
+ * be answered in writing.
  */
-export function canRenderAgentFormInline(communication: PendingAgentCommunication): boolean {
-    return communication.kind === 'form'
-        && communication.questions.length > 0
-        && communication.questions.every(question => question.options.length > 0 && question.allowCustom !== true);
-}
-
-/**
- * The legacy banner/modal owns only requests the transcript card cannot show.
- * This decision deliberately does not depend on whether the matching tool
- * message has arrived yet, so the two render paths cannot race each other.
- */
-export function shouldUseAgentQuestionFallback(communication: PendingAgentCommunication): boolean {
-    return !canRenderAgentFormInline(communication);
+export function acceptsWrittenAnswer(question: AgentQuestion): boolean {
+    return question.allowCustom === true || question.options.length === 0;
 }
 
 /** A question is answerable if it offers options or accepts written text. */

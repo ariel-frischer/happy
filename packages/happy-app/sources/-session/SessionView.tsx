@@ -1,7 +1,6 @@
 import { AgentContentView } from '@/components/AgentContentView';
 import { MobileGlassBackdrop } from '@/components/MobileGlass';
 import { AgentGoalBar, type AgentGoalAction } from '@/components/AgentGoalBar';
-import { AgentQuestionBanner } from '@/components/AgentQuestionBanner';
 import { AgentInput } from '@/components/AgentInput';
 import { resolveVisibleAgentGoalStatus } from '@/components/agentGoalStatus';
 import type { MultiTextInputHandle } from '@/components/MultiTextInput';
@@ -1251,13 +1250,6 @@ export function SessionViewLoaded({
                     </CenteredInputWidth>
                 </AnimatedFade>
             )}
-            {sessionId ? (
-                <AnimatedFade visible={showBottomDockDetails}>
-                    <CenteredInputWidth horizontalPadding={sessionInputHorizontalPadding}>
-                        <AgentQuestionBanner sessionId={sessionId} />
-                    </CenteredInputWidth>
-                </AnimatedFade>
-            ) : null}
             <AnimatedFade visible={showBottomDockDetails}>
                 <RigActivityBar metadata={session?.metadata ?? null} />
             </AnimatedFade>
