@@ -4,6 +4,7 @@ import { ApiClient } from '@/api/api';
 import type { ApiSessionClient } from '@/api/apiSession';
 import type { AgentMessage } from '@/agent/core';
 import { AcpBackend, type AcpPermissionHandler } from './AcpBackend';
+import { AcpElicitationBridge } from './AcpElicitationBridge';
 import { DefaultTransport } from '@/agent/transport';
 import { AcpSessionManager } from './AcpSessionManager';
 import type { SessionEnvelope } from '@slopus/happy-wire';
@@ -436,12 +437,9 @@ type PendingTurn = {
   timeout: NodeJS.Timeout;
 };
 
-function resolveSessionFlavor(agentName: string): 'gemini' | 'opencode' | 'acp' {
-  if (agentName === 'gemini') {
-    return 'gemini';
-  }
-  if (agentName === 'opencode') {
-    return 'opencode';
+function resolveSessionFlavor(agentName: string): 'gemini' | 'opencode' | 'omp' | 'acp' {
+  if (agentName === 'gemini' || agentName === 'opencode' || agentName === 'omp') {
+    return agentName;
   }
   return 'acp';
 }
@@ -482,6 +480,7 @@ export async function runAcp(opts: {
 
   let session: ApiSessionClient;
   let permissionHandler: GenericAcpPermissionHandler;
+  let elicitationBridge: AcpElicitationBridge;
   const { session: initialSession, reconnectionHandle } = setupOfflineReconnection({
     api,
     sessionTag,
@@ -492,6 +491,9 @@ export async function runAcp(opts: {
       session = newSession;
       if (permissionHandler) {
         permissionHandler.updateSession(newSession);
+      }
+      if (elicitationBridge) {
+        elicitationBridge.updateSession(newSession);
       }
     },
   });
@@ -516,6 +518,9 @@ export async function runAcp(opts: {
   // process that died while a tool prompt was open — see the matching
   // call in claudeRemoteLauncher for the full rationale.
   permissionHandler.reset('Previous CLI process exited before responding');
+  elicitationBridge = new AcpElicitationBridge(session, `[${opts.agentName}]`);
+  // Same for forms a dead CLI process left open.
+  elicitationBridge.cancelAll('Previous CLI process exited before responding');
   const sessionManager = new AcpSessionManager();
   const messageQueue = new MessageQueue2<AcpSwitchMode>((mode) => hashObject(mode));
   let currentPermissionMode: string | undefined;
@@ -543,6 +548,7 @@ export async function runAcp(opts: {
     args: opts.args,
     mcpServers,
     permissionHandler,
+    elicitationHandler: (request) => elicitationBridge.request(request),
     transportHandler: new DefaultTransport(opts.agentName),
     verbose,
   });
@@ -873,6 +879,7 @@ export async function runAcp(opts: {
         await backend.cancel(acpSessionId);
       }
       permissionHandler.reset();
+      elicitationBridge.cancelAll('Aborted by user');
       abortController.abort();
     } catch (error) {
       logger.debug(`[${opts.agentName}] Abort failed:`, error);
@@ -963,6 +970,7 @@ export async function runAcp(opts: {
 
     try {
       permissionHandler.reset();
+      elicitationBridge.cancelAll('Session ended');
     } catch (error) {
       logger.debug(`[${opts.agentName}] Failed to reset permission handler:`, error);
     }

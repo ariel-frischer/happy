@@ -11,6 +11,7 @@ import { Readable, Writable } from 'node:stream';
 import {
   ClientSideConnection,
   ndJsonStream,
+  RequestError,
   type Client,
   type Agent,
   type SessionNotification,
@@ -107,12 +108,21 @@ import {
   handlePlanUpdate,
   handleThinkingUpdate,
 } from './sessionUpdateHandlers';
+import {
+  ELICITATION_CREATE_METHOD,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
+} from './elicitationForm';
+import { selectPermissionOptionId } from './permissionOptions';
 
 /**
  * Extended RequestPermissionRequest with additional fields that may be present
  */
 type ExtendedRequestPermissionRequest = RequestPermissionRequest & {
   toolCall?: {
+    /** ACP spec field */
+    toolCallId?: string;
+    /** Legacy field some agents send instead of `toolCallId` */
     id?: string;
     kind?: string;
     toolName?: string;
@@ -197,6 +207,12 @@ export interface AcpBackendOptions {
 
   /** Optional permission handler for tool approval */
   permissionHandler?: AcpPermissionHandler;
+
+  /**
+   * Optional handler for agent->client `elicitation/create` form requests.
+   * When set, the client advertises `clientCapabilities.elicitation.form`.
+   */
+  elicitationHandler?: (request: CreateElicitationRequest) => Promise<CreateElicitationResponse>;
 
   /** Transport handler for agent-specific behavior (timeouts, filtering, etc.) */
   transportHandler?: TransportHandler;
@@ -570,8 +586,10 @@ export class AcpBackend implements AgentBackend {
           const toolCall = extendedParams.toolCall;
           let toolName = toolCall?.kind || toolCall?.toolName || extendedParams.kind || 'Unknown tool';
           // Use toolCallId as the single source of truth for permission ID
-          // This ensures mobile app sends back the same ID that we use to store pending requests
-          const toolCallId = toolCall?.id || randomUUID();
+          // This ensures mobile app sends back the same ID that we use to store pending requests.
+          // ACP puts it in `toolCall.toolCallId`; some agents send a legacy `toolCall.id`.
+          const correlatedToolCallId = toolCall?.toolCallId;
+          const toolCallId = correlatedToolCallId || toolCall?.id || randomUUID();
           const permissionId = toolCallId; // Use same ID for consistency!
           
           // Extract input/arguments from various possible locations FIRST (before checking toolName)
@@ -604,7 +622,7 @@ export class AcpBackend implements AgentBackend {
           logger.debug(`[AcpBackend] Permission request params structure:`, JSON.stringify({
             hasToolCall: !!toolCall,
             toolCallKind: toolCall?.kind,
-            toolCallId: toolCall?.id,
+            toolCallId: correlatedToolCallId ?? toolCall?.id,
             paramsKind: extendedParams.kind,
             paramsKeys: Object.keys(params),
           }, null, 2));
@@ -637,61 +655,30 @@ export class AcpBackend implements AgentBackend {
                 input
               );
               
-              // Map permission decision to ACP response
-              // ACP uses optionId from the request options
-              let optionId = 'cancel'; // Default to cancel/deny
-              
-              if (result.decision === 'approved' || result.decision === 'approved_for_session') {
-                // Find the appropriate optionId from the request options
-                // Look for 'proceed_once' or 'proceed_always' in options
-                const proceedOnceOption = options.find((opt: any) => 
-                  opt.optionId === 'proceed_once' || opt.name?.toLowerCase().includes('once')
-                );
-                const proceedAlwaysOption = options.find((opt: any) => 
-                  opt.optionId === 'proceed_always' || opt.name?.toLowerCase().includes('always')
-                );
-                
-                if (result.decision === 'approved_for_session' && proceedAlwaysOption) {
-                  optionId = proceedAlwaysOption.optionId || 'proceed_always';
-                } else if (proceedOnceOption) {
-                  optionId = proceedOnceOption.optionId || 'proceed_once';
-                } else if (options.length > 0) {
-                  // Fallback to first option if no specific match
-                  optionId = options[0].optionId || 'proceed_once';
-                }
-                
-                // Emit tool-result with permissionId so UI can close the timer
-                // This is needed because tool_call_update comes with a different ID
+              // Map permission decision to one of the agent's offered option ids
+              const optionId = selectPermissionOptionId(options, result.decision);
+              const approved = result.decision === 'approved' || result.decision === 'approved_for_session';
+
+              // Without a spec tool call id the permission id is not the
+              // streamed tool call's id, so emit a tool-result under the
+              // permission id to close its timer. With a real toolCallId the
+              // agent's own tool_call_update ends the call; emitting here would
+              // end the live tool call early.
+              if (!correlatedToolCallId) {
                 this.emit({
                   type: 'tool-result',
                   toolName,
-                  result: { status: 'approved', decision: result.decision },
-                  callId: permissionId,
-                });
-              } else {
-                // Denied or aborted - find cancel option
-                const cancelOption = options.find((opt: any) => 
-                  opt.optionId === 'cancel' || opt.name?.toLowerCase().includes('cancel')
-                );
-                if (cancelOption) {
-                  optionId = cancelOption.optionId || 'cancel';
-                }
-                
-                // Emit tool-result for denied/aborted
-                this.emit({
-                  type: 'tool-result',
-                  toolName,
-                  result: { status: 'denied', decision: result.decision },
+                  result: { status: approved ? 'approved' : 'denied', decision: result.decision },
                   callId: permissionId,
                 });
               }
-              
+
               return { outcome: { outcome: 'selected', optionId } };
             } catch (error) {
               // Log to file only, not console
               logger.debug('[AcpBackend] Error in permission handler:', error);
               // Fallback to deny on error
-              return { outcome: { outcome: 'selected', optionId: 'cancel' } };
+              return { outcome: { outcome: 'selected', optionId: selectPermissionOptionId(options, 'abort') } };
             }
           }
           
@@ -702,6 +689,14 @@ export class AcpBackend implements AgentBackend {
           );
           const defaultOptionId = proceedOnceOption?.optionId || (options.length > 0 && options[0].optionId ? options[0].optionId : 'proceed_once');
           return { outcome: { outcome: 'selected', optionId: defaultOptionId } };
+        },
+        // SDK 0.14.1 has no typed elicitation handler; unknown agent->client
+        // requests are dispatched here with their raw method name.
+        extMethod: async (method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> => {
+          if (method === ELICITATION_CREATE_METHOD && this.options.elicitationHandler) {
+            return await this.options.elicitationHandler(params as CreateElicitationRequest);
+          }
+          throw RequestError.methodNotFound(method);
         },
       };
 
@@ -719,7 +714,9 @@ export class AcpBackend implements AgentBackend {
             readTextFile: false,
             writeTextFile: false,
           },
-        },
+          // ACP draft capability, not yet in SDK 0.14.1 types; the SDK sends params as-is.
+          ...(this.options.elicitationHandler ? { elicitation: { form: {} } } : {}),
+        } as InitializeRequest['clientCapabilities'],
         clientInfo: {
           name: 'happy-cli',
           version: packageJson.version,

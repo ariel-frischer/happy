@@ -38,6 +38,7 @@ happy openclaw
 
 # or any ACP-compatible CLI
 happy acp opencode
+happy acp omp   # Oh My Pi: `omp acp`, with phone approvals and ask forms
 happy acp -- custom-agent --flag
 ```
 

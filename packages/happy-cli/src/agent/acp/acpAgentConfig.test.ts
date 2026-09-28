@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_ACP_AGENTS, resolveAcpAgentConfig } from './acpAgentConfig';
-
-describe('KNOWN_ACP_AGENTS', () => {
-  it('defines built-in Gemini and OpenCode command mappings', () => {
-    expect(KNOWN_ACP_AGENTS).toEqual({
-      gemini: { command: 'gemini', args: ['--experimental-acp'] },
-      opencode: { command: 'opencode', args: ['acp'] },
-    });
-  });
-});
+import { resolveAcpAgentConfig } from './acpAgentConfig';
 
 describe('resolveAcpAgentConfig', () => {
   it('resolves known agent names to predefined command + args', () => {
@@ -16,6 +7,14 @@ describe('resolveAcpAgentConfig', () => {
       agentName: 'gemini',
       command: 'gemini',
       args: ['--experimental-acp'],
+    });
+  });
+
+  it('runs omp in ACP mode and keeps extra args after the subcommand', () => {
+    expect(resolveAcpAgentConfig(['omp', '--yolo'])).toEqual({
+      agentName: 'omp',
+      command: 'omp',
+      args: ['acp', '--yolo'],
     });
   });
 

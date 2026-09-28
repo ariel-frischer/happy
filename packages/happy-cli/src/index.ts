@@ -738,6 +738,7 @@ ${chalk.bold('Examples:')}
   happy --claude-env ANTHROPIC_BASE_URL=http://127.0.0.1:3456
                            Use a custom API endpoint (e.g., claude-code-router)
   happy acp gemini         Start Gemini via generic ACP runner
+  happy acp omp            Start Oh My Pi (omp acp) via generic ACP runner
   happy acp -- opencode --acp
                            Start a custom ACP command
   happy acp opencode --verbose

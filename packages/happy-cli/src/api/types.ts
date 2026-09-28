@@ -435,4 +435,57 @@ export type AgentState = {
     }
   }
   agentGoalStatus?: AgentGoalStatus
+  /** Pending agent-to-user communications (e.g. forms), keyed by request id. */
+  communications?: {
+    [id: string]: AgentCommunication
+  }
+  completedCommunications?: {
+    [id: string]: AgentCommunication & {
+      completedAt: number,
+      status: 'answered' | 'cancelled',
+      answers?: Record<string, AgentQuestionAnswer>,
+    }
+  }
+}
+
+/** One selectable answer of an agent question; mirrors the app's AgentQuestionOptionSchema. */
+export type AgentQuestionOption = {
+  label: string,
+  description?: string | null,
+}
+
+/** Mirrors the app's AgentQuestionSchema. */
+export type AgentQuestion = {
+  id: string,
+  header: string,
+  question: string,
+  options: AgentQuestionOption[],
+  multiSelect?: boolean | null,
+  /** Lets the user write an answer the agent did not offer. */
+  allowCustom?: boolean | null,
+  /** When false the user may submit without choosing anything. */
+  required?: boolean | null,
+}
+
+/** Mirrors the app's AgentCommunicationSchema. */
+export type AgentCommunication = {
+  kind: string,
+  createdAt?: number | null,
+  toolUseId?: string | null,
+  title?: string | null,
+  form?: { questions: AgentQuestion[] } | null,
+}
+
+/** Answer to one question, keyed by question id in the app's reply. */
+export type AgentQuestionAnswer = {
+  options: string[],
+  custom?: string | null,
+}
+
+/** `communication` session RPC payload sent by the app (sessionAnswerQuestion / sessionCancelCommunication). */
+export type SessionCommunicationReply = {
+  id: string,
+  kind: string,
+  status: 'answered' | 'cancelled',
+  answers?: Record<string, AgentQuestionAnswer>,
 }
