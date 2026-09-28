@@ -57,8 +57,9 @@ happy acp -- custom-agent --flag
 > from the phone land in that same live process. Sessions started from the
 > phone with agent `omp` run the TUI in a detached tmux session
 > `happy-omp-<id>`; attach with `tmux attach -t happy-omp-<id>`. Without tmux,
-> the daemon falls back to headless `happy acp omp`. Approvals and `ask`
-> forms stay on the computer in this mode.
+> the daemon falls back to headless `happy acp omp`. `ask` questions show in
+> the TUI and as an app form at once, and the first answer wins. Tool approvals
+> stay on the computer in this mode.
 
 ## Daemon
 

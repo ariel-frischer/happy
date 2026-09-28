@@ -255,8 +255,12 @@ export class PushNotificationClient {
         kind: SessionNotificationKind
         metadata: Metadata | null | undefined
         data?: Record<string, any>
+        /** Replaces the default body (the session title), e.g. with the question asked. */
+        body?: string
     }): void {
-        const { title, body } = getSessionNotificationCopy(params.kind, params.metadata)
+        const copy = getSessionNotificationCopy(params.kind, params.metadata)
+        const title = copy.title
+        const body = params.body?.trim() || copy.body
         const sessionTitle = getSessionNotificationBody(params.metadata)
         const url = getSessionNotificationUrl(params.data)
         const payloadData = {

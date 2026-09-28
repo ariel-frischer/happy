@@ -8,7 +8,7 @@
  */
 import { z } from 'zod';
 
-export const OMP_BRIDGE_PROTOCOL_VERSION = 1;
+export const OMP_BRIDGE_PROTOCOL_VERSION = 2;
 
 const OmpSessionInfoSchema = z.object({
   cwd: z.string(),
@@ -16,6 +16,33 @@ const OmpSessionInfoSchema = z.object({
   title: z.string().optional(),
 });
 export type OmpSessionInfo = z.infer<typeof OmpSessionInfoSchema>;
+
+/** One question of omp's `ask` dialog (omp's ExtensionAskDialogQuestion, minus previews). */
+const OmpAskQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  header: z.string().optional(),
+  options: z.array(z.object({ label: z.string(), description: z.string().optional() })),
+  multi: z.boolean().optional(),
+  /** Index of the recommended option. */
+  recommended: z.number().int().optional(),
+});
+export type OmpAskQuestion = z.infer<typeof OmpAskQuestionSchema>;
+
+/** Answer to one question, as omp's ask dialog returns it. */
+const OmpAskAnswerSchema = z.object({
+  id: z.string(),
+  selectedOptions: z.array(z.string()),
+  customInput: z.string().optional(),
+});
+export type OmpAskAnswer = z.infer<typeof OmpAskAnswerSchema>;
+
+/** omp's ExtensionAskDialogResultItem: what the extension hands back to the ask tool. */
+export type OmpAskResultItem = OmpAskAnswer & {
+  question: string;
+  options: string[];
+  multi: boolean;
+};
 
 /** Extension → bridge. */
 export const ExtToBridgeSchema = z.discriminatedUnion('t', [
@@ -43,6 +70,13 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('title'), title: z.string() }),
   /** omp is shutting down: archive the Happy session and exit. */
   z.object({ t: z.literal('end') }),
+  /** An `ask` dialog opened in the TUI; show it in the app too. First answer wins. */
+  z.object({ t: z.literal('ask'), id: z.string(), toolCallId: z.string().optional(), questions: z.array(OmpAskQuestionSchema) }),
+  /**
+   * The TUI dialog settled first (or the ask was aborted): close the app form.
+   * `answers` is set when the user answered on the laptop.
+   */
+  z.object({ t: z.literal('ask_cancel'), id: z.string(), answers: z.array(OmpAskAnswerSchema).optional() }),
 ]);
 export type ExtToBridge = z.infer<typeof ExtToBridgeSchema>;
 
@@ -53,6 +87,10 @@ export type BridgeToExt =
   | { t: 'user_message'; text: string }
   /** Stop button in the app. */
   | { t: 'abort' }
+  /** The app answered an `ask` first; resolve the TUI dialog with these results. */
+  | { t: 'ask_answer'; id: string; results: OmpAskResultItem[] }
+  /** The app dismissed an `ask` form; cancel the TUI dialog too. */
+  | { t: 'ask_cancelled'; id: string }
   /** The app archived/killed the mirror; omp keeps running unmirrored until the next session switch. */
   | { t: 'detached'; reason: string }
   | { t: 'error'; message: string; fatal: boolean };

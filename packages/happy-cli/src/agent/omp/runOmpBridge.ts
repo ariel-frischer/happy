@@ -6,17 +6,20 @@
 import { createInterface } from 'node:readline';
 import { ApiClient } from '@/api/api';
 import type { ApiSessionClient } from '@/api/apiSession';
+import { FormCommunicationBridge } from '@/agent/formCommunicationBridge';
 import { archiveHappySession, openHappySession, type OpenedHappySession } from '@/agent/happySession';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
 import { initialMachineMetadata } from '@/daemon/run';
 import { readCredentials, readSettings } from '@/persistence';
 import { logger } from '@/ui/logger';
 import { connectionState } from '@/utils/serverConnectionErrors';
-import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpSessionInfo } from './bridgeProtocol';
+import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpSessionInfo } from './bridgeProtocol';
 import { OmpBridgeMapper } from './OmpBridgeMapper';
+import { formAnswersToOmpAsk, ompAskToForm, ompAskToFormAnswers } from './ompAskForm';
 
 const LOG = '[omp-bridge]';
 const KEEP_ALIVE_MS = 2000;
+const PUSH_BODY_MAX = 140;
 
 type Mirror = {
   session: ApiSessionClient;
@@ -25,6 +28,11 @@ type Mirror = {
   keepAlive: NodeJS.Timeout;
   thinking: boolean;
   closed: boolean;
+  /** `ask` dialogs shown in the app, by ask id; removed once either side settles. */
+  asks: Map<string, OmpAskQuestion[]>;
+  forms: FormCommunicationBridge;
+  /** A message from the app arrived since the last finished turn. */
+  appTurn: boolean;
 };
 
 function send(message: BridgeToExt): void {
@@ -68,6 +76,9 @@ export async function runOmpBridge(): Promise<void> {
     if (current === mirror) current = null;
     clearInterval(mirror.keepAlive);
     mirror.opened.reconnectionHandle?.cancel();
+    // The TUI dialogs stay up; only the app forms go away.
+    mirror.asks.clear();
+    mirror.forms.cancelAll(reason);
     await archiveHappySession(mirror.session, reason, LOG);
     logger.debug(`${LOG} closed Happy session ${mirror.opened.id}: ${reason}`);
   };
@@ -83,6 +94,7 @@ export async function runOmpBridge(): Promise<void> {
       const text = message.content.text;
       if (mirror.closed || !text) return;
       logger.debug(`${LOG} app message -> omp (${text.length} chars)`);
+      mirror.appTurn = true;
       send({ t: 'user_message', text });
     });
     session.rpcHandlerManager.registerHandler('abort', async () => {
@@ -111,6 +123,7 @@ export async function runOmpBridge(): Promise<void> {
         if (!mirror || mirror.closed) return;
         mirror.session = session;
         wire(mirror, session);
+        mirror.forms.updateSession(session);
       },
     });
     const created: Mirror = {
@@ -120,13 +133,47 @@ export async function runOmpBridge(): Promise<void> {
       keepAlive: setInterval(() => created.session.keepAlive(created.thinking, 'remote'), KEEP_ALIVE_MS),
       thinking: false,
       closed: false,
+      asks: new Map(),
+      forms: new FormCommunicationBridge(opened.session, LOG),
+      appTurn: false,
     };
     mirror = created;
     wire(created, created.session);
+    // Forms a previous bridge process left open can no longer be answered.
+    created.forms.cancelAll('Previous omp bridge exited before responding');
     created.session.keepAlive(false, 'remote');
     current = created;
     logger.debug(`${LOG} opened Happy session ${opened.id} for omp session ${info.ompSessionId} in ${info.cwd}`);
     send({ t: 'ready', v: OMP_BRIDGE_PROTOCOL_VERSION, happySessionId: opened.id });
+  };
+
+  const pushNotification = (mirror: Mirror, kind: 'done' | 'question', data: Record<string, unknown>, body?: string) => {
+    api.push().sendSessionNotification({
+      kind,
+      metadata: mirror.session.getMetadata(),
+      data: { sessionId: mirror.opened.id, provider: 'omp', ...data },
+      ...(body ? { body } : {}),
+    });
+  };
+
+  /** Shows a TUI `ask` in the app; whichever side answers first wins. */
+  const openAsk = (mirror: Mirror, id: string, questions: OmpAskQuestion[], toolCallId: string | undefined) => {
+    mirror.asks.set(id, questions);
+    const form = ompAskToForm(questions);
+    void mirror.forms.open({ ...form, ...(toolCallId ? { toolUseId: toolCallId } : {}) }, id).then((reply) => {
+      // Not pending any more: the TUI settled first or the mirror closed.
+      if (!mirror.asks.delete(id) || mirror.closed) return;
+      if (reply.status === 'answered') {
+        logger.debug(`${LOG} ask ${id} answered in the app`);
+        send({ t: 'ask_answer', id, results: formAnswersToOmpAsk(questions, reply.answers) });
+      } else {
+        logger.debug(`${LOG} ask ${id} dismissed in the app`);
+        send({ t: 'ask_cancelled', id });
+      }
+    });
+    const first = questions[0]?.question.trim() ?? '';
+    const body = first.length > PUSH_BODY_MAX ? `${first.slice(0, PUSH_BODY_MAX - 1)}…` : first;
+    pushNotification(mirror, 'question', { tool: 'ask', type: 'question_request', ...(toolCallId ? { toolCallId } : {}) }, body);
   };
 
   const shutdown = async (reason: string) => {
@@ -156,6 +203,16 @@ export async function runOmpBridge(): Promise<void> {
       case 'end':
         await shutdown('omp exited');
         return;
+      case 'ask':
+        if (current) openAsk(current, event.id, event.questions, event.toolCallId);
+        return;
+      case 'ask_cancel': {
+        const mirror = current;
+        if (!mirror || !mirror.asks.delete(event.id)) return;
+        mirror.forms.close(event.id, event.answers ? ompAskToFormAnswers(event.answers) : undefined);
+        logger.debug(`${LOG} ask ${event.id} settled in the TUI`);
+        return;
+      }
       case 'title': {
         const title = event.title;
         current?.session.updateMetadata((metadata) => ({ ...metadata, ...titleMetadata(title) }));
@@ -174,6 +231,11 @@ export async function runOmpBridge(): Promise<void> {
         }
         if (mapped.turnEnded) {
           mirror.session.sendSessionEvent({ type: 'ready' });
+          // Like Claude's remote mode: tell the phone a turn it started is done.
+          if (mirror.appTurn && event.t === 'status' && (event.outcome ?? 'completed') === 'completed' && !event.error) {
+            pushNotification(mirror, 'done', { type: 'ready' });
+          }
+          mirror.appTurn = false;
         }
       }
     }
