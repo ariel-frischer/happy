@@ -65,6 +65,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
     // Default commands
     compact: 'Compact the conversation history',
     goal: 'Set a session goal',
+    model: 'Show or switch the model',
+    thinking: 'Show or set the thinking level',
     
     // Common tool commands
     help: 'Show available commands',

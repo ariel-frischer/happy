@@ -24,6 +24,8 @@ const KEEP_ALIVE_MS = 2000;
 const PUSH_BODY_MAX = 140;
 /** Total decoded image bytes one app message may hand to omp. */
 const APP_IMAGES_MAX_BYTES = 20 * 1024 * 1024;
+/** omp commands the extension runs when typed in the app (plus /compact, an app default). */
+const APP_SLASH_COMMANDS = ['model', 'thinking'];
 
 type Mirror = {
   /** The omp session this mirrors. */
@@ -174,7 +176,7 @@ export async function runOmpBridge(): Promise<void> {
       sandbox: settings.sandboxConfig,
       // hostPid is the omp TUI: the daemon matches tmux-spawned sessions by
       // pane pid and stops sessions by signalling this pid.
-      metadataOverrides: { path: info.cwd, hostPid, ...titleMetadata(info.title) },
+      metadataOverrides: { path: info.cwd, hostPid, slashCommands: APP_SLASH_COMMANDS, ...titleMetadata(info.title) },
       logPrefix: LOG,
       ...(previous ? { reopen: { tag: previous.tag, encryption: previous.encryption } } : {}),
       onSessionSwap: (session) => {
@@ -369,6 +371,9 @@ export async function runOmpBridge(): Promise<void> {
         if (!current) return;
         sendMapped(current, event);
         if (event.status === 'idle' && event.leafId) recordMirror(current, event.leafId);
+        return;
+      case 'notice':
+        current?.session.sendSessionEvent({ type: 'message', message: event.text });
         return;
       case 'activity':
         if (current) setActivity(current, event.text || null);

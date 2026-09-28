@@ -109,6 +109,8 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('activity'), text: z.string().optional() }),
   StatusEventSchema,
   z.object({ t: z.literal('title'), title: z.string() }),
+  /** A one-line note for the app (result of an app `/command`, e.g. the new model). */
+  z.object({ t: z.literal('notice'), text: z.string() }),
   /** omp is shutting down: archive the Happy session and exit. */
   z.object({ t: z.literal('end') }),
   /** An `ask` dialog opened in the TUI; show it in the app too. First answer wins. */
