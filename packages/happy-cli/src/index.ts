@@ -401,6 +401,18 @@ Conversation history is preserved on the server, but in-flight tool calls are in
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'omp-bridge') {
+    // Hidden: stdio child of the omp `happy-bridge` extension. Never prompts:
+    // stdin/stdout carry the bridge protocol. Lazy-loaded like the other
+    // subcommands to keep CLI startup cheap.
+    try {
+      const { runOmpBridge } = await import('@/agent/omp/runOmpBridge');
+      await runOmpBridge();
+    } catch (error) {
+      process.stdout.write(`${JSON.stringify({ t: 'error', message: error instanceof Error ? error.message : String(error), fatal: true })}\n`);
+      process.exit(1);
+    }
+    return;
   } else if (subcommand === 'openclaw') {
     try {
       const { runOpenClaw } = await import('@/openclaw/runOpenClaw');

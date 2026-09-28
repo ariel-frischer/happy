@@ -51,6 +51,15 @@ happy acp -- custom-agent --flag
 > inside Happy, so selecting "default" for an agy session does **not** give
 > you an approval prompt the way it does for Claude Code.
 
+> **omp dual mode:** with the omp `happy-bridge` extension installed, a
+> normal `omp` TUI on your computer mirrors itself into Happy through the
+> hidden `happy omp-bridge` subcommand (JSON lines over stdio), and messages
+> from the phone land in that same live process. Sessions started from the
+> phone with agent `omp` run the TUI in a detached tmux session
+> `happy-omp-<id>`; attach with `tmux attach -t happy-omp-<id>`. Without tmux,
+> the daemon falls back to headless `happy acp omp`. Approvals and `ask`
+> forms stay on the computer in this mode.
+
 ## Daemon
 
 The daemon is a background service that stays running on your machine. It lets you spawn and manage coding sessions remotely — from your phone or the web app — without needing an open terminal.

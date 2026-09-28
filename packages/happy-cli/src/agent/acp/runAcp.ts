@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ApiClient } from '@/api/api';
 import type { ApiSessionClient } from '@/api/apiSession';
@@ -13,10 +12,7 @@ import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { Credentials, readSettings } from '@/persistence';
 import { initialMachineMetadata } from '@/daemon/run';
-import { createSessionMetadata } from '@/utils/createSessionMetadata';
-import { setupOfflineReconnection } from '@/utils/setupOfflineReconnection';
-import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
-import { encodeBase64 } from '@/api/encryption';
+import { archiveHappySession, openHappySession } from '@/agent/happySession';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { projectPath } from '@/projectPath';
@@ -453,7 +449,6 @@ export async function runAcp(opts: {
   verbose?: boolean;
 }): Promise<void> {
   const verbose = opts.verbose === true;
-  const sessionTag = randomUUID();
   connectionState.setBackend(opts.agentName);
 
   const api = await ApiClient.create(opts.credentials);
@@ -467,26 +462,16 @@ export async function runAcp(opts: {
     metadata: initialMachineMetadata,
   });
 
-  const { state, metadata } = createSessionMetadata({
-    flavor: resolveSessionFlavor(opts.agentName),
-    machineId: settings.machineId,
-    startedBy: opts.startedBy,
-    sandbox: settings.sandboxConfig,
-  });
-  const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
-  if (response) {
-    logAcp('muted', `Happy Session ID: ${response.id}`);
-  }
-
   let session: ApiSessionClient;
   let permissionHandler: GenericAcpPermissionHandler;
   let elicitationBridge: AcpElicitationBridge;
-  const { session: initialSession, reconnectionHandle } = setupOfflineReconnection({
+  const opened = await openHappySession({
     api,
-    sessionTag,
-    metadata,
-    state,
-    response,
+    machineId: settings.machineId,
+    flavor: resolveSessionFlavor(opts.agentName),
+    startedBy: opts.startedBy,
+    sandbox: settings.sandboxConfig,
+    logPrefix: '[acp]',
     onSessionSwap: (newSession) => {
       session = newSession;
       if (permissionHandler) {
@@ -497,21 +482,11 @@ export async function runAcp(opts: {
       }
     },
   });
-  session = initialSession;
-
-  if (response) {
-    try {
-      await notifyDaemonSessionStarted(response.id, metadata, {
-        encryptionKey: encodeBase64(response.encryptionKey),
-        encryptionVariant: response.encryptionVariant,
-        seq: response.seq,
-        metadataVersion: response.metadataVersion,
-        agentStateVersion: response.agentStateVersion,
-      });
-    } catch (error) {
-      logger.debug('[acp] Failed to report session to daemon:', error);
-    }
+  if (opened.id) {
+    logAcp('muted', `Happy Session ID: ${opened.id}`);
   }
+  const reconnectionHandle = opened.reconnectionHandle;
+  session = opened.session;
 
   permissionHandler = new GenericAcpPermissionHandler(session, opts.agentName);
   // Drop any permission requests left in agent state from a previous CLI
@@ -984,19 +959,6 @@ export async function runAcp(opts: {
       logger.debug(`[${opts.agentName}] Failed to stop Happy MCP server:`, error);
     }
 
-    try {
-      session.updateMetadata((currentMetadata) => ({
-        ...currentMetadata,
-        lifecycleState: 'archived',
-        lifecycleStateSince: Date.now(),
-        archivedBy: 'cli',
-        archiveReason: 'Session ended',
-      }));
-      session.sendSessionDeath();
-      await session.flush();
-      await session.close();
-    } catch (error) {
-      logger.debug(`[${opts.agentName}] Session close failed:`, error);
-    }
+    await archiveHappySession(session, 'Session ended', `[${opts.agentName}]`);
   }
 }

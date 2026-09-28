@@ -1,0 +1,54 @@
+import { createEnvelope, type SessionEnvelope } from '@slopus/happy-wire';
+import { AcpSessionManager } from '@/agent/acp/AcpSessionManager';
+import type { ExtToBridge } from './bridgeProtocol';
+
+export type OmpMappedEvent = {
+  envelopes: SessionEnvelope[];
+  /** New agent busy state for keep-alive, when this event changed it. */
+  thinking?: boolean;
+  /** A turn finished; the app expects a `ready` session event. */
+  turnEnded?: boolean;
+};
+
+/**
+ * Maps omp TUI events onto the same session-protocol envelopes `happy acp omp`
+ * produces (via {@link AcpSessionManager}), so the app renders both identically.
+ * One mapper per Happy session.
+ */
+export class OmpBridgeMapper {
+  private readonly turns = new AcpSessionManager();
+
+  map(event: ExtToBridge): OmpMappedEvent {
+    switch (event.t) {
+      case 'user':
+        return { envelopes: event.text ? [createEnvelope('user', { t: 'text', text: event.text })] : [] };
+      case 'assistant': {
+        const envelopes: SessionEnvelope[] = [];
+        if (event.thinking) {
+          envelopes.push(...this.turns.mapMessage({ type: 'event', name: 'thinking', payload: { text: event.thinking, streaming: false } }));
+        }
+        if (event.text) {
+          // Separate consecutive assistant messages that land in one flushed block.
+          envelopes.push(...this.turns.mapMessage({ type: 'model-output', textDelta: `${event.text}\n\n` }));
+        }
+        return { envelopes };
+      }
+      case 'tool_start':
+        return { envelopes: this.turns.mapMessage({ type: 'tool-call', toolName: event.name, args: event.args, callId: event.id }) };
+      case 'tool_end':
+        return { envelopes: this.turns.mapMessage({ type: 'tool-result', toolName: event.name, result: { isError: event.isError }, callId: event.id }) };
+      case 'status': {
+        if (event.status === 'busy') {
+          return { envelopes: this.turns.startTurn(), thinking: true };
+        }
+        const envelopes = event.error
+          ? this.turns.mapMessage({ type: 'status', status: 'error', detail: event.error })
+          : [];
+        envelopes.push(...this.turns.endTurn(event.outcome ?? (event.error ? 'failed' : 'completed')));
+        return { envelopes, thinking: false, turnEnded: true };
+      }
+      default:
+        return { envelopes: [] };
+    }
+  }
+}

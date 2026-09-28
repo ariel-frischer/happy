@@ -1,5 +1,8 @@
 import fs from 'fs/promises';
 import os from 'os';
+import { execFile } from 'child_process';
+import { randomBytes } from 'crypto';
+import { promisify } from 'util';
 import * as tmp from 'tmp';
 import axios from 'axios';
 
@@ -32,11 +35,14 @@ import type { ResumeSessionOptions } from '@/api/apiMachine';
 import {
   buildSessionChildEnvironment,
   sanitizeSessionEnvironment,
+  sessionEnvironmentKeysToUnset,
   wrapTmuxCommandWithSessionEnvironmentSanitizer,
 } from './sessionEnvironment';
 import { startHappyTerminalDaemon } from './happyTerminalBoot';
-import { appendDaemonSpawnModeArgs, buildDaemonAgentLaunchArgs, type DaemonSpawnAgent, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
+import { appendDaemonSpawnModeArgs, buildDaemonAgentLaunchArgs, buildOmpTmuxSpawn, type DaemonSpawnAgent, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
 import { hasPersistedProcessConflict, isPidAlive, machineBootTimeMs } from './sessionLiveness';
+
+const execFileAsync = promisify(execFile);
 
 /** Shell-escape a string for safe interpolation into tmux commands. */
 function shellescape(s: string): string {
@@ -223,9 +229,10 @@ export async function startDaemon(): Promise<void> {
       logger.debug(`[DAEMON RUN] Current tracked sessions before webhook: ${Array.from(pidToTrackedSession.keys()).join(', ')}`);
 
       const existingSession = pidToTrackedSession.get(pid);
+      const rotated = !!existingSession?.happySessionId && existingSession.happySessionId !== sessionId;
       // A reconnect child is reserved for one identity before it reports in.
       // Reject mismatches before persisting any metadata or key material.
-      if (existingSession?.startedBy === 'daemon' && existingSession.happySessionId && existingSession.happySessionId !== sessionId) {
+      if (existingSession?.startedBy === 'daemon' && rotated && !existingSession.rotatesHappySession) {
         logger.debug(`[DAEMON RUN] Ignoring webhook for unexpected session ${sessionId} from reconnect PID ${pid}`);
         return;
       }
@@ -244,6 +251,16 @@ export async function startDaemon(): Promise<void> {
         });
       }
 
+      // The same process moved on to a new Happy session (omp TUI bridge on
+      // /new, /resume, /fork). Keep the previous one resumable like an exit would.
+      if (existingSession && rotated) {
+        const previousId = existingSession.happySessionId!;
+        if (existingSession.encryption) {
+          sessionIdToFinishedSession.set(previousId, { ...existingSession });
+          markSessionStopped(previousId);
+        }
+        logger.debug(`[DAEMON RUN] PID ${pid} rotated from session ${previousId} to ${sessionId}`);
+      }
       // Check if we already have this PID (daemon-spawned)
       if (existingSession && existingSession.startedBy === 'daemon') {
         // Update daemon-spawned session with reported data
@@ -271,7 +288,66 @@ export async function startDaemon(): Promise<void> {
         };
         pidToTrackedSession.set(pid, trackedSession);
         logger.debug(`[DAEMON RUN] Registered externally-started session ${sessionId}`);
+      } else {
+        existingSession.happySessionId = sessionId;
+        existingSession.happySessionMetadataFromLocalWebhook = sessionMetadata;
+        existingSession.encryption = encryption ?? existingSession.encryption;
       }
+    };
+
+    // tmux panes are not our children: the session becomes known only when the
+    // process inside reports itself with hostPid === pane pid.
+    const awaitTmuxSessionWebhook = (pid: number, timeoutMs: number): Promise<SpawnSessionResult> => {
+      logger.debug(`[DAEMON RUN] Waiting for session webhook for PID ${pid} (tmux)`);
+      // Executor form: tsconfig lib (es2022) has no Promise.withResolvers.
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          pidToAwaiter.delete(pid);
+          logger.debug(`[DAEMON RUN] Session webhook timeout for PID ${pid} (tmux)`);
+          resolve({ type: 'error', errorMessage: `Session webhook timeout for PID ${pid} (tmux)` });
+        }, timeoutMs);
+        pidToAwaiter.set(pid, (completedSession) => {
+          clearTimeout(timeout);
+          logger.debug(`[DAEMON RUN] Session ${completedSession.happySessionId} fully spawned with webhook (tmux)`);
+          resolve({ type: 'success', sessionId: completedSession.happySessionId! });
+        });
+      });
+    };
+
+    /** Start the omp TUI in a fresh tmux session; null means tmux failed and the caller falls back. */
+    const spawnOmpInTmux = async (directory: string, extraEnv: Record<string, string>, directoryCreated: boolean): Promise<SpawnSessionResult | null> => {
+      const env: Record<string, string> = {};
+      for (const [key, value] of Object.entries(buildSessionChildEnvironment(ambientEnvironment, extraEnv))) {
+        if (value !== undefined) env[key] = value;
+      }
+      const { sessionName, tmuxArgs } = buildOmpTmuxSpawn({
+        directory,
+        env,
+        unsetKeys: sessionEnvironmentKeysToUnset(extraEnv),
+        suffix: randomBytes(3).toString('hex'),
+      });
+      let pid: number;
+      try {
+        const { stdout } = await execFileAsync('tmux', tmuxArgs);
+        pid = parseInt(stdout.trim(), 10);
+        if (Number.isNaN(pid)) throw new Error(`tmux printed no pane pid: ${stdout}`);
+      } catch (error) {
+        logger.debug(`[DAEMON RUN] Failed to start omp in tmux, falling back to headless acp omp:`, error);
+        return null;
+      }
+      const attach = `tmux attach -t ${sessionName}`;
+      logger.debug(`[DAEMON RUN] Started omp TUI in tmux session ${sessionName} (PID ${pid}); attach with: ${attach}`);
+      pidToTrackedSession.set(pid, {
+        startedBy: 'daemon',
+        pid,
+        tmuxSessionId: sessionName,
+        directoryCreated,
+        rotatesHappySession: true,
+        message: `${directoryCreated ? `Created '${directory}'. ` : ''}Started omp in tmux session '${sessionName}'. Attach on this machine with '${attach}'.`,
+      });
+      // omp boots the TUI, its extension starts `happy omp-bridge`, which then
+      // creates the Happy session: slower than a bare CLI child.
+      return awaitTmuxSessionWebhook(pid, 30_000);
     };
 
     // Spawn a new session (sessionId reserved for future --resume functionality)
@@ -413,6 +489,13 @@ export async function startDaemon(): Promise<void> {
         const tmuxAvailable = await isTmuxAvailable();
         let useTmux = tmuxAvailable;
 
+        // omp: run the interactive TUI in its own tmux session; its happy-bridge
+        // extension mirrors it into Happy. Headless `acp omp` is the fallback.
+        if (options.agent === 'omp' && tmuxAvailable) {
+          const spawned = await spawnOmpInTmux(directory, extraEnv, directoryCreated);
+          if (spawned) return spawned;
+        }
+
         // Get tmux session name from environment variables (now set by profile system)
         // Empty string means "use current/most recent session" (tmux default behavior)
         let tmuxSessionName: string | undefined = extraEnv.TMUX_SESSION_NAME;
@@ -495,30 +578,7 @@ export async function startDaemon(): Promise<void> {
             // Add to tracking map so webhook can find it later
             pidToTrackedSession.set(tmuxResult.pid, trackedSession);
 
-            // Wait for webhook to populate session with happySessionId (exact same as regular flow)
-            logger.debug(`[DAEMON RUN] Waiting for session webhook for PID ${tmuxResult.pid} (tmux)`);
-
-            return new Promise((resolve) => {
-              // Set timeout for webhook (same as regular flow)
-              const timeout = setTimeout(() => {
-                pidToAwaiter.delete(tmuxResult.pid!);
-                logger.debug(`[DAEMON RUN] Session webhook timeout for PID ${tmuxResult.pid} (tmux)`);
-                resolve({
-                  type: 'error',
-                  errorMessage: `Session webhook timeout for PID ${tmuxResult.pid} (tmux)`
-                });
-              }, 15_000); // Same timeout as regular sessions
-
-              // Register awaiter for tmux session (exact same as regular flow)
-              pidToAwaiter.set(tmuxResult.pid!, (completedSession) => {
-                clearTimeout(timeout);
-                logger.debug(`[DAEMON RUN] Session ${completedSession.happySessionId} fully spawned with webhook (tmux)`);
-                resolve({
-                  type: 'success',
-                  sessionId: completedSession.happySessionId!
-                });
-              });
-            });
+            return awaitTmuxSessionWebhook(tmuxResult.pid, 15_000);
           } else {
             logger.debug(`[DAEMON RUN] Failed to spawn in tmux: ${tmuxResult.error}, falling back to regular spawning`);
             useTmux = false;
