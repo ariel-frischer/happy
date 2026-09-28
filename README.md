@@ -45,11 +45,11 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 - Tool approvals in a mirrored TUI stay on the laptop (or omp Collab). omp lets extensions observe approval requests but not answer them.
 - Happy's own push notifications need your own FCM credentials in the app build. Use ntfy (or similar) for pushes until then.
 - Tapping a background job opens its card's detail view; the chat does not scroll to the card.
-- Racing `ask` between the TUI and the app depends on omp internals. It was built against omp 18.3.5; later omp versions may break it.
+- Racing `ask` between the TUI and the app depends on omp internals (verified on omp 18.3.5 and 18.4.1). A later omp version may quietly break it; the TUI keeps working either way.
 
 **Setup**
 
-1. Build and link the CLI from this repo: `pnpm install && pnpm --filter happy build`, then `npm link` in `packages/happy-cli`.
+1. Build and link the CLI from this repo: `pnpm install && pnpm --filter happy build`, then `pnpm --filter happy cli:install` to link `happy` globally.
 2. Put the `happy-bridge.ts` omp extension in `~/.omp/agent/extensions/`. It lives in Ariel's omp config, not in this repo.
 3. Authenticate and start the daemon: `happy auth login`, then `happy daemon start` (after a rebuild: `happy daemon stop; happy daemon start`).
 4. Run `omp` as usual. The session appears in the app.
