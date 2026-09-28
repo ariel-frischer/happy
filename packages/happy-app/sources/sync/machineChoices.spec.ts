@@ -188,6 +188,19 @@ describe('what a computer can actually run', () => {
         expect(resolveChoiceAgent(cliOnly, 'gemini')).toBe('claude');
     });
 
+    it('starts the omp default only on a machine that reports omp installed', () => {
+        const withOmp = collectMachineChoices([machine('omp-machine', {
+            host: 'laptop.local',
+            cliAvailability: { claude: true, codex: true, gemini: false, openclaw: false, omp: true },
+        })])[0];
+        const withoutOmp = collectMachineChoices([cli()])[0];
+
+        expect(listMachineChoiceAvailableAgents(withOmp)).toEqual(['omp', 'claude', 'codex']);
+        expect(resolveChoiceAgent(withOmp, 'omp')).toBe('omp');
+        expect(resolveChoiceAgent(withOmp, 'codex')).toBe('codex');
+        expect(resolveChoiceAgent(withoutOmp, 'omp')).toBe('claude');
+    });
+
     it('sends each agent to the daemon that runs it', () => {
         const choice = collectMachineChoices([cli(), rig()])[0];
         expect(resolveAgentMachine(choice, 'rig')?.id).toBe(RIG);

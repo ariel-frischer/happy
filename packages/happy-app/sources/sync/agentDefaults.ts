@@ -1,7 +1,7 @@
 import * as z from 'zod';
 import { compareVersionsWithPrerelease, isWellFormedVersion } from '@/utils/versionUtils';
 
-export const agentKeys = ['claude', 'codex', 'gemini', 'openclaw', 'agy'] as const;
+export const agentKeys = ['claude', 'codex', 'gemini', 'openclaw', 'agy', 'omp'] as const;
 export type AgentKey = typeof agentKeys[number];
 
 export const AgentDefaultOverrideSchema = z.object({
@@ -16,6 +16,7 @@ export const AgentDefaultOverridesSchema = z.object({
     gemini: AgentDefaultOverrideSchema.optional(),
     openclaw: AgentDefaultOverrideSchema.optional(),
     agy: AgentDefaultOverrideSchema.optional(),
+    omp: AgentDefaultOverrideSchema.optional(),
 }).passthrough().default({});
 
 export type AgentDefaultOverride = z.infer<typeof AgentDefaultOverrideSchema>;
@@ -37,6 +38,9 @@ const codeAgentDefaults: Record<AgentKey, AgentDefaultConfig> = {
     gemini: { permissionMode: 'default', modelMode: 'gemini-2.5-pro', effortLevel: null },
     openclaw: { permissionMode: 'default', modelMode: 'default', effortLevel: null },
     agy: { permissionMode: 'default', modelMode: 'Gemini 3.8 Flash', effortLevel: 'medium' },
+    // omp reports its own modes and models over ACP once the session runs;
+    // "default" leaves the choice to omp's own configuration.
+    omp: { permissionMode: 'default', modelMode: 'default', effortLevel: null },
 };
 
 // `auto` first shipped in happy-cli 1.2.1-beta.2, for Claude and Codex alike.
@@ -60,7 +64,7 @@ function resolveCodeDefaultPermissionMode(
 }
 
 export function normalizeAgentKey(flavor: string | null | undefined): AgentKey {
-    if (flavor === 'codex' || flavor === 'gemini' || flavor === 'openclaw' || flavor === 'agy') {
+    if (flavor === 'codex' || flavor === 'gemini' || flavor === 'openclaw' || flavor === 'agy' || flavor === 'omp') {
         return flavor;
     }
     return 'claude';

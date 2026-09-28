@@ -306,6 +306,22 @@ export function filterPermissionModesForCli<T extends ModeOption>(
     return modes.filter((mode) => modeSupportedByCli(mode, cliVersion));
 }
 
+// omp publishes its real modes and models over ACP once a session runs, and a
+// running session's menus read those from metadata. Before that there is
+// nothing to pick: "default" leaves the choice to omp's own configuration, and
+// any other key would be ignored by the ACP runner anyway.
+export function getOmpPermissionModes(): PermissionMode[] {
+    return [
+        { key: 'default', name: 'Default', description: null },
+    ];
+}
+
+export function getOmpModelModes(): ModelMode[] {
+    return [
+        { key: 'default', name: 'Default model', description: null },
+    ];
+}
+
 export function getHardcodedPermissionModes(flavor: AgentFlavor, translate: Translate): PermissionMode[] {
     if (flavor === 'codex') {
         return getCodexPermissionModes(translate);
@@ -318,6 +334,9 @@ export function getHardcodedPermissionModes(flavor: AgentFlavor, translate: Tran
     }
     if (flavor === 'agy') {
         return getAgyPermissionModes(translate);
+    }
+    if (flavor === 'omp') {
+        return getOmpPermissionModes();
     }
     return getClaudePermissionModes(translate);
 }
@@ -352,6 +371,9 @@ export function getHardcodedModelModes(flavor: AgentFlavor, _translate: Translat
     }
     if (flavor === 'agy') {
         return getAgyModelModes();
+    }
+    if (flavor === 'omp') {
+        return getOmpModelModes();
     }
     return getClaudeModelModes();
 }

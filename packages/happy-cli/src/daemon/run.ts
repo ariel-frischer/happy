@@ -35,7 +35,7 @@ import {
   wrapTmuxCommandWithSessionEnvironmentSanitizer,
 } from './sessionEnvironment';
 import { startHappyTerminalDaemon } from './happyTerminalBoot';
-import { appendDaemonSpawnModeArgs, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
+import { appendDaemonSpawnModeArgs, buildDaemonAgentLaunchArgs, type DaemonSpawnAgent, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
 import { hasPersistedProcessConflict, isPidAlive, machineBootTimeMs } from './sessionLiveness';
 
 /** Shell-escape a string for safe interpolation into tmux commands. */
@@ -435,19 +435,17 @@ export async function startDaemon(): Promise<void> {
 
           // Construct command for the CLI
           const cliPath = join(projectPath(), 'dist', 'index.mjs');
-          // Determine agent command - support claude, codex, gemini, openclaw, and agy
-          const agent = options.agent === 'gemini' ? 'gemini' : (options.agent === 'codex' ? 'codex' : (options.agent === 'openclaw' ? 'openclaw' : (options.agent === 'agy' ? 'agy' : 'claude')));
+          // Determine agent command - support claude, codex, gemini, openclaw, agy, and omp
+          const agent = options.agent === 'gemini' || options.agent === 'codex' || options.agent === 'openclaw' || options.agent === 'agy' || options.agent === 'omp'
+            ? options.agent
+            : 'claude';
           const resumeId = agent === 'claude'
             ? options.resumeClaudeSessionId
             : (agent === 'codex' ? options.resumeCodexThreadId : undefined);
           const resumeFragment = resumeId
             ? ` --resume ${shellescape(resumeId)}`
             : '';
-          const launchArgs = [
-            agent,
-            '--happy-starting-mode', 'remote',
-            '--started-by', 'daemon',
-          ];
+          const launchArgs = buildDaemonAgentLaunchArgs(agent);
           appendDaemonSpawnModeArgs(launchArgs, options, agent);
           const modeFragment = launchArgs.map(shellescape).join(' ');
           const fullCommand = `node --no-warnings --no-deprecation ${shellescape(cliPath)} ${modeFragment}${resumeFragment}`;
@@ -531,8 +529,8 @@ export async function startDaemon(): Promise<void> {
         if (!useTmux) {
           logger.debug(`[DAEMON RUN] Using regular process spawning`);
 
-          // Construct arguments for the CLI - support claude, codex, and gemini
-          let agentCommand: string;
+          // Construct arguments for the CLI
+          let agentCommand: DaemonSpawnAgent;
           switch (options.agent) {
             case 'claude':
             case undefined:
@@ -550,17 +548,16 @@ export async function startDaemon(): Promise<void> {
             case 'agy':
               agentCommand = 'agy';
               break;
+            case 'omp':
+              agentCommand = 'omp';
+              break;
             default:
               return {
                 type: 'error',
                 errorMessage: `Unsupported agent type: '${options.agent}'. Please update your CLI to the latest version.`
               };
           }
-          const args = [
-            agentCommand,
-            '--happy-starting-mode', 'remote',
-            '--started-by', 'daemon'
-          ];
+          const args = buildDaemonAgentLaunchArgs(agentCommand);
           appendDaemonSpawnModeArgs(args, options, agentCommand);
 
           // Resume ids attach the new Happy session to a pre-existing provider

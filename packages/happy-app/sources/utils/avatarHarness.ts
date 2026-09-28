@@ -8,6 +8,9 @@
  */
 export type AvatarHarnessIcon = 'claude' | 'codex' | 'agy' | 'omp' | 'rig';
 
+/** Oh My Pi has no bundled logo; its badge and picker icon are this glyph. */
+export const OMP_HARNESS_GLYPH = 'π';
+
 const ACTIVE_HARNESS_ICONS: ReadonlySet<string> = new Set([
     'claude',
     'codex',

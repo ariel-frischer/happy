@@ -4,7 +4,8 @@ type Draft = {
     input: string;
     selectedMachineId: string | null;
     selectedPath: string | null;
-    agentType: 'claude' | 'codex' | 'gemini' | 'openclaw' | 'agy' | 'rig';
+    agentType: 'claude' | 'codex' | 'gemini' | 'openclaw' | 'agy' | 'omp' | 'rig';
+    agentTypeChosen: boolean;
     permissionMode: string | null;
     modelMode: string | null;
     effortLevel: string | null;
@@ -32,6 +33,7 @@ function persistedDraft(overrides: Partial<Draft> = {}): Draft {
         selectedMachineId: null,
         selectedPath: null,
         agentType: 'claude',
+        agentTypeChosen: true,
         permissionMode: null,
         modelMode: null,
         effortLevel: null,
@@ -55,7 +57,8 @@ describe('useNewSessionDraft', () => {
         expect(useNewSessionDraft.getState().permissionMode).toBeNull();
         expect(useNewSessionDraft.getState().modelMode).toBeNull();
         expect(useNewSessionDraft.getState().effortLevel).toBeNull();
-        expect(useNewSessionDraft.getState().agentType).toBe('claude');
+        expect(useNewSessionDraft.getState().agentType).toBe('omp');
+        expect(useNewSessionDraft.getState().agentTypeChosen).toBe(false);
     });
 
     it.each(['claude', 'codex', 'rig'] as const)('preserves the saved %s selection', async (agentType) => {
@@ -76,6 +79,16 @@ describe('useNewSessionDraft', () => {
         expect(useNewSessionDraft.getState().permissionMode).toBe('yolo');
         expect(useNewSessionDraft.getState().modelMode).toBe('opus');
         expect(useNewSessionDraft.getState().effortLevel).toBe('xhigh');
+    });
+
+    it('persists a picked harness as chosen and an app-resolved one as not chosen', async () => {
+        const { useNewSessionDraft } = await import('./useNewSessionDraft');
+
+        useNewSessionDraft.getState().chooseAgentType('codex');
+        expect(mockPersistence.saved.at(-1)).toMatchObject({ agentType: 'codex', agentTypeChosen: true });
+
+        useNewSessionDraft.getState().setAgentType('claude');
+        expect(mockPersistence.saved.at(-1)).toMatchObject({ agentType: 'claude', agentTypeChosen: false });
     });
 
     it('persists effort changes with the rest of the new-session draft', async () => {

@@ -813,6 +813,7 @@ export const HomeDock = React.memo(({
     const setMachineId = useNewSessionDraft((state) => state.setMachineId);
     const renameMachineId = useNewSessionDraft((state) => state.renameMachineId);
     const setAgentType = useNewSessionDraft((state) => state.setAgentType);
+    const chooseAgentType = useNewSessionDraft((state) => state.chooseAgentType);
     const setPath = useNewSessionDraft((state) => state.setPath);
     const setProjectId = useNewSessionDraft((state) => state.setProjectId);
     const setSessionType = useNewSessionDraft((state) => state.setSessionType);
@@ -1319,7 +1320,9 @@ export const HomeDock = React.memo(({
         closeFocusMode();
     }, [closeFocusMode, closePicker, isSubmitting, refuse, sheetPage]);
 
-    const selectAgent = React.useCallback((agent: NewSessionAgentType) => {
+    // `chosen` marks a pick from the harness picker, which the draft keeps
+    // across launches; everything else is the app resolving the harness.
+    const selectAgent = React.useCallback((agent: NewSessionAgentType, chosen = false) => {
         const nextRigCreation = agent === 'rig' ? rigSelectionCreation : null;
         const nextDefaults = nextRigCreation
             ? {
@@ -1330,11 +1333,15 @@ export const HomeDock = React.memo(({
             : resolveAgentDefaultConfig(defaultOverrides, agent, happyCliVersion);
         // Choosing Happy Agent no longer moves the machine selection: the computer already covers
         // both daemons, and switching it under the person was what made the picker show two.
-        setAgentType(agent);
+        if (chosen) {
+            chooseAgentType(agent);
+        } else {
+            setAgentType(agent);
+        }
         setPermissionMode(nextDefaults.permissionMode);
         setModelMode(nextDefaults.modelMode);
         if (nextDefaults.effortLevel) setEffortLevel(nextDefaults.effortLevel);
-    }, [defaultOverrides, happyCliVersion, rigSelectionCreation, setAgentType, setEffortLevel, setModelMode, setPermissionMode]);
+    }, [chooseAgentType, defaultOverrides, happyCliVersion, rigSelectionCreation, setAgentType, setEffortLevel, setModelMode, setPermissionMode]);
 
     React.useEffect(() => {
         if (resolvedAgentType !== agentType) {
@@ -1512,7 +1519,7 @@ export const HomeDock = React.memo(({
                 title: 'Harness',
                 sections: [{ key: 'agent', title: 'Harness', options: availableAgents }],
                 selectedKey: agentType,
-                onSelect: (key) => selectAgent(key as NewSessionAgentType),
+                onSelect: (key) => selectAgent(key as NewSessionAgentType, true),
             };
         }
         if (setting === 'model') {

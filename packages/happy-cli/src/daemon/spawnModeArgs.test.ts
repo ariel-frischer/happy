@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { appendDaemonSpawnModeArgs, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
+import { appendDaemonSpawnModeArgs, buildDaemonAgentLaunchArgs, shouldForwardDaemonPermissionMode } from './spawnModeArgs';
+
+describe('daemon agent launch arguments', () => {
+  it('starts omp through the ACP runner without flags it would forward to omp', () => {
+    expect(buildDaemonAgentLaunchArgs('omp')).toEqual(['acp', 'omp', '--started-by', 'daemon']);
+  });
+
+  it('starts dedicated agents in remote mode', () => {
+    expect(buildDaemonAgentLaunchArgs('gemini')).toEqual(['gemini', '--happy-starting-mode', 'remote', '--started-by', 'daemon']);
+  });
+});
 
 describe('daemon spawn mode arguments', () => {
   it('forwards Codex default because it is a concrete ask-first policy', () => {

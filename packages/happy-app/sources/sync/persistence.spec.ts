@@ -12,7 +12,34 @@ vi.mock('react-native-mmkv', () => ({
     },
 }));
 
-const { loadPendingSettings, savePendingSettings } = await import('./persistence');
+const { loadNewSessionDraft, loadPendingSettings, savePendingSettings } = await import('./persistence');
+
+describe('loadNewSessionDraft harness', () => {
+    beforeEach(() => store.clear());
+
+    function loadWith(fields: Record<string, unknown>) {
+        store.set('new-session-draft-v1', JSON.stringify({ input: '', updatedAt: 1, ...fields }));
+        return loadNewSessionDraft();
+    }
+
+    it('keeps a harness a person picked', () => {
+        expect(loadWith({ agentType: 'claude', agentTypeChosen: true })).toMatchObject({ agentType: 'claude', agentTypeChosen: true });
+        expect(loadWith({ agentType: 'omp', agentTypeChosen: true })).toMatchObject({ agentType: 'omp', agentTypeChosen: true });
+    });
+
+    it('starts from omp when the app picked the saved harness', () => {
+        expect(loadWith({ agentType: 'codex', agentTypeChosen: false })).toMatchObject({ agentType: 'omp', agentTypeChosen: false });
+    });
+
+    it('treats a legacy Claude draft as the old default, but a legacy other harness as a choice', () => {
+        expect(loadWith({ agentType: 'claude' })).toMatchObject({ agentType: 'omp', agentTypeChosen: false });
+        expect(loadWith({ agentType: 'codex' })).toMatchObject({ agentType: 'codex', agentTypeChosen: true });
+    });
+
+    it('falls back to omp for an unknown harness', () => {
+        expect(loadWith({ agentType: 'mystery', agentTypeChosen: true })).toMatchObject({ agentType: 'omp', agentTypeChosen: false });
+    });
+});
 
 describe('loadPendingSettings', () => {
     beforeEach(() => store.clear());

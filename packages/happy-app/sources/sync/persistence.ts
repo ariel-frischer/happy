@@ -5,6 +5,7 @@ import { LocalSettings, localSettingsDefaults, localSettingsParse } from './loca
 import { Purchases, purchasesDefaults, purchasesParse } from './purchases';
 import { Profile, profileDefaults, profileParse } from './profile';
 import type { PermissionModeKey } from '@/components/PermissionModeSelector';
+import { DEFAULT_HARNESS } from '@/utils/harnessCatalog';
 
 const mmkv = new MMKV();
 const NEW_SESSION_DRAFT_KEY = 'new-session-draft-v1';
@@ -13,7 +14,13 @@ const VOICE_SOFT_PAYWALL_SHOWN_KEY = 'voice-soft-paywall-shown';
 const VOICE_ONBOARDING_PROMPT_LOAD_COUNT_KEY = 'voice-onboarding-prompt-load-count';
 const VOICE_MESSAGE_COUNT_KEY = 'voice-message-count';
 
-export type NewSessionAgentType = 'claude' | 'codex' | 'gemini' | 'openclaw' | 'agy' | 'rig';
+export type NewSessionAgentType = 'claude' | 'codex' | 'gemini' | 'openclaw' | 'agy' | 'omp' | 'rig';
+
+const NEW_SESSION_AGENT_TYPES: readonly NewSessionAgentType[] = ['claude', 'codex', 'gemini', 'openclaw', 'agy', 'omp', 'rig'];
+
+function isNewSessionAgentType(value: unknown): value is NewSessionAgentType {
+    return NEW_SESSION_AGENT_TYPES.includes(value as NewSessionAgentType);
+}
 export type NewSessionSessionType = 'simple' | 'worktree';
 
 export interface NewSessionDraft {
@@ -27,6 +34,12 @@ export interface NewSessionDraft {
      */
     selectedProjectId: string | null;
     agentType: NewSessionAgentType;
+    /**
+     * Whether a person picked `agentType`. A harness the app picked on its own
+     * (the default, or the fallback for a machine without it) is not kept
+     * across launches, so a new default or a newly installed CLI still wins.
+     */
+    agentTypeChosen: boolean;
     permissionMode: PermissionModeKey | null;
     modelMode: string | null;
     effortLevel: string | null;
@@ -200,9 +213,18 @@ export function loadNewSessionDraft(): NewSessionDraft | null {
         const selectedMachineId = typeof parsed.selectedMachineId === 'string' ? parsed.selectedMachineId : null;
         const selectedPath = typeof parsed.selectedPath === 'string' ? parsed.selectedPath : null;
         const selectedProjectId = typeof parsed.selectedProjectId === 'string' ? parsed.selectedProjectId : null;
-        const agentType: NewSessionAgentType = parsed.agentType === 'codex' || parsed.agentType === 'gemini' || parsed.agentType === 'openclaw' || parsed.agentType === 'agy' || parsed.agentType === 'rig'
-            ? parsed.agentType
-            : 'claude';
+        const storedAgentType = isNewSessionAgentType(parsed.agentType) ? parsed.agentType : null;
+        // Drafts saved before the flag existed cannot say who picked the
+        // harness. Claude was the old default, so only a different harness
+        // is known to be a choice.
+        const agentTypeChosen = storedAgentType !== null && (
+            typeof parsed.agentTypeChosen === 'boolean'
+                ? parsed.agentTypeChosen
+                : storedAgentType !== 'claude'
+        );
+        const agentType: NewSessionAgentType = agentTypeChosen && storedAgentType
+            ? storedAgentType
+            : DEFAULT_HARNESS;
         const permissionMode: PermissionModeKey | null = typeof parsed.permissionMode === 'string'
             ? parsed.permissionMode
             : null;
@@ -218,6 +240,7 @@ export function loadNewSessionDraft(): NewSessionDraft | null {
             selectedPath,
             selectedProjectId,
             agentType,
+            agentTypeChosen,
             permissionMode,
             modelMode,
             effortLevel,

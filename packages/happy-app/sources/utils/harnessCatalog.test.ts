@@ -18,13 +18,14 @@ describe('harness catalog', () => {
 
     it('lists only installed harnesses, in pick order', () => {
         const harnesses = listAvailableHarnesses({
-            availability: { claude: true, codex: true, agy: true },
+            availability: { omp: true, claude: true, codex: true, agy: true },
             happyAgentAvailable: true,
             selected: 'claude',
         });
 
-        expect(harnesses.map((harness) => harness.key)).toEqual(['claude', 'codex', 'agy', 'rig']);
+        expect(harnesses.map((harness) => harness.key)).toEqual(['omp', 'claude', 'codex', 'agy', 'rig']);
         expect(harnesses.map((harness) => harness.name)).toEqual([
+            'Oh My Pi',
             'Claude Code',
             'Codex',
             'Antigravity',
@@ -90,6 +91,20 @@ describe('harness catalog', () => {
             availability: null,
             happyAgentAvailable: false,
             selected: 'agy',
+        }).map((harness) => harness.key)).toEqual(['claude', 'codex']);
+    });
+
+    it('never lists omp without an explicit installation report, even as the default', () => {
+        expect(listAvailableHarnesses({
+            availability: { claude: true, codex: true, gemini: false, openclaw: false },
+            happyAgentAvailable: false,
+            selected: 'omp',
+        }).map((harness) => harness.key)).toEqual(['claude', 'codex']);
+
+        expect(listAvailableHarnesses({
+            availability: null,
+            happyAgentAvailable: false,
+            selected: 'omp',
         }).map((harness) => harness.key)).toEqual(['claude', 'codex']);
     });
 

@@ -48,12 +48,14 @@ const agentLabels: Record<AgentKey, string> = {
     gemini: getHarnessName('gemini'),
     openclaw: getHarnessName('openclaw'),
     agy: getHarnessName('agy'),
+    omp: getHarnessName('omp'),
 };
 
 // A retired harness keeps its stored defaults — the schema still carries them,
 // and "Reset all" still clears them — but there is nothing to configure for an
-// agent you can no longer start a session with.
-const configurableAgentKeys = agentKeys.filter((agent) => !isRetiredHarness(agent));
+// agent you can no longer start a session with. omp is left out too: its modes
+// and models come from omp itself, so the only option here would be "default".
+const configurableAgentKeys = agentKeys.filter((agent) => !isRetiredHarness(agent) && agent !== 'omp');
 
 function optionName(options: ModeOption[], key: string | null | undefined): string {
     if (!key) return 'none';

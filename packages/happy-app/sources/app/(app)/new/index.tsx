@@ -78,6 +78,7 @@ import {
 } from '@/utils/newSessionPickerInteraction';
 import { getCodeAgentDefaults, resolveAgentDefaultConfig } from '@/sync/agentDefaults';
 import { delay } from '@/utils/time';
+import { OMP_HARNESS_GLYPH } from '@/utils/avatarHarness';
 import {
     buildRigSpawnConfiguration,
     getRigMachineSessionCreation,
@@ -103,20 +104,44 @@ import {
     LocalBlurHalo,
 } from '@/components/AnimatedOverlay';
 
-// Agent icon assets
-const agentIcons = {
+// Agent icon assets. Harnesses without a bundled logo render a text glyph,
+// matching their avatar badge.
+const agentIcons: Record<NewSessionAgentType, number | { glyph: string }> = {
     rig: require('@/assets/images/logo-black.png'),
     claude: require('@/assets/images/icon-claude.png'),
     codex: require('@/assets/images/icon-gpt.png'),
     openclaw: require('@/assets/images/icon-openclaw.png'),
     gemini: require('@/assets/images/icon-gemini.png'),
     agy: require('@/assets/images/icon-agy.png'),
+    omp: { glyph: OMP_HARNESS_GLYPH },
 };
+
+function AgentIcon({ agent, size, color }: { agent: NewSessionAgentType; size: number; color: string }) {
+    const icon = agentIcons[agent];
+    if (typeof icon !== 'number') {
+        return (
+            <Text
+                style={{ width: size, height: size, fontSize: size, lineHeight: size, fontWeight: '700', textAlign: 'center', color }}
+                allowFontScaling={false}
+            >
+                {icon.glyph}
+            </Text>
+        );
+    }
+    return (
+        <RNImage
+            source={icon}
+            style={{ width: size, height: size, tintColor: color }}
+            resizeMode="contain"
+        />
+    );
+}
 
 type AgentKey = NewSessionAgentType;
 // Lowercased to match this screen's type, but the same names and pick order as
 // the Home composer's harness picker. Retired harnesses are absent from both.
 const ALL_AGENTS: { key: AgentKey; label: string }[] = [
+    { key: 'omp', label: 'omp' },
     { key: 'claude', label: 'claude code' },
     { key: 'codex', label: 'codex' },
     { key: 'agy', label: 'antigravity' },
@@ -808,6 +833,7 @@ function NewSessionScreen() {
         setProjectId: s.setProjectId,
         agentType: s.agentType,
         setAgentType: s.setAgentType,
+        chooseAgentType: s.chooseAgentType,
         permissionMode: s.permissionMode,
         setPermissionMode: s.setPermissionMode,
         modelMode: s.modelMode,
@@ -821,6 +847,7 @@ function NewSessionScreen() {
     })));
     const draftAgent = draft.agentType;
     const setSelectedAgent = draft.setAgentType;
+    const chooseSelectedAgent = draft.chooseAgentType;
     const selectedMachineId = draft.selectedMachineId;
     const setSelectedMachineId = draft.setMachineId;
     const renameSelectedMachineId = draft.renameMachineId;
@@ -1388,7 +1415,7 @@ function NewSessionScreen() {
                 break;
             case 'agent':
                 if (availableAgents.some((candidate) => candidate.key === key)) {
-                    setSelectedAgent(key as NewSessionAgentType);
+                    chooseSelectedAgent(key as NewSessionAgentType);
                 }
                 break;
             case 'model': {
@@ -1427,7 +1454,7 @@ function NewSessionScreen() {
         effortLevels,
         modelModes,
         permissionModes,
-        setSelectedAgent,
+        chooseSelectedAgent,
         setSelectedMachineId,
         setWorktreeKey,
     ]);
@@ -2020,11 +2047,7 @@ function NewSessionScreen() {
                                             onPress={() => togglePicker('agent')}
                                             style={(p) => [styles.configInlineField, p.pressed && styles.configRowPressed]}
                                         >
-                                            <RNImage
-                                                source={agentIcons[agent.key]}
-                                                style={[styles.agentIcon, { tintColor: theme.colors.textSecondary }]}
-                                                resizeMode="contain"
-                                            />
+                                            <AgentIcon agent={agent.key} size={15} color={theme.colors.textSecondary} />
                                             <Text style={[styles.configLabel, styles.configInlineText]} numberOfLines={1}>
                                                 {agent.label}
                                             </Text>
@@ -2137,11 +2160,7 @@ function NewSessionScreen() {
                                         hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                                         style={(p) => [styles.collapsedIconButton, p.pressed && styles.configRowPressed]}
                                     >
-                                        <RNImage
-                                            source={agentIcons[agent.key]}
-                                            style={[styles.collapsedAgentIcon, { tintColor: theme.colors.textSecondary }]}
-                                            resizeMode="contain"
-                                        />
+                                        <AgentIcon agent={agent.key} size={14} color={theme.colors.textSecondary} />
                                     </BubblePressable>
 
                                     {showPermission && (
@@ -2282,11 +2301,7 @@ function NewSessionScreen() {
                             accessibilityRole="button"
                             accessibilityLabel={`Agent: ${agent.label}`}
                         >
-                            <RNImage
-                                source={agentIcons[agent.key]}
-                                style={[styles.collapsedAgentIcon, { tintColor: theme.colors.textSecondary }]}
-                                resizeMode="contain"
-                            />
+                            <AgentIcon agent={agent.key} size={14} color={theme.colors.textSecondary} />
                             <Text style={styles.composerAgentLabel} numberOfLines={1}>
                                 {agent.label}
                             </Text>
@@ -2800,14 +2815,6 @@ const styles = StyleSheet.create((theme) => ({
     },
     configRowPressed: {
         opacity: 0.6,
-    },
-    agentIcon: {
-        width: 15,
-        height: 15,
-    },
-    collapsedAgentIcon: {
-        width: 14,
-        height: 14,
     },
     configLabel: {
         minWidth: 0,

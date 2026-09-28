@@ -8,7 +8,7 @@ import { AvatarGradient } from "./AvatarGradient";
 import { AvatarBrutalist } from "./AvatarBrutalist";
 import { useSetting } from '@/sync/storage';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { resolveAvatarHarness, type AvatarHarnessIcon } from '@/utils/avatarHarness';
+import { OMP_HARNESS_GLYPH, resolveAvatarHarness, type AvatarHarnessIcon } from '@/utils/avatarHarness';
 import { normalizeAvatarStyle } from '@/utils/avatarStyle';
 
 export type AvatarBadgeLocation = 'sessionHeader' | 'sessionList' | 'none';
@@ -33,7 +33,7 @@ const harnessIcons: Record<AvatarHarnessIcon, number | { glyph: string }> = {
     claude: require('@/assets/images/icon-claude.png'),
     codex: require('@/assets/images/icon-gpt.png'),
     agy: require('@/assets/images/icon-agy.png'),
-    omp: { glyph: 'π' },
+    omp: { glyph: OMP_HARNESS_GLYPH },
     rig: require('@/assets/images/logo-black.png'),
 };
 

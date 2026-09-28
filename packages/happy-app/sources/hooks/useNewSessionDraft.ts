@@ -11,6 +11,7 @@ import {
     type NewSessionAgentType,
     type NewSessionSessionType,
 } from '@/sync/persistence';
+import { DEFAULT_HARNESS } from '@/utils/harnessCatalog';
 import type { PermissionModeKey } from '@/components/PermissionModeSelector';
 import type { AttachmentPreview } from '@/sync/attachmentTypes';
 import { rollBotFaceSeeds, type BotFaceSeeds, type BotFaceSlot } from '@/utils/botFace';
@@ -27,6 +28,8 @@ interface NewSessionDraftState {
      */
     selectedProjectId: string | null;
     agentType: NewSessionAgentType;
+    /** Whether a person picked `agentType`; see NewSessionDraft.agentTypeChosen. */
+    agentTypeChosen: boolean;
     permissionMode: PermissionModeKey | null;
     modelMode: string | null;
     effortLevel: string | null;
@@ -58,7 +61,10 @@ interface NewSessionDraftState {
     setPath: (path: string | null) => void;
     /** Names a catalog project as the place, in place of whatever directory was chosen before. */
     setProjectId: (id: string | null) => void;
+    /** Moves the draft to a harness the app picked (a fallback or a consequence of another pick). */
     setAgentType: (agent: NewSessionAgentType) => void;
+    /** Records a harness a person picked; it is kept across launches. */
+    chooseAgentType: (agent: NewSessionAgentType) => void;
     setPermissionMode: (mode: PermissionModeKey) => void;
     setModelMode: (mode: string) => void;
     setEffortLevel: (level: string) => void;
@@ -79,6 +85,7 @@ function persist(state: NewSessionDraftState) {
         selectedPath: state.selectedPath,
         selectedProjectId: state.selectedProjectId,
         agentType: state.agentType,
+        agentTypeChosen: state.agentTypeChosen,
         permissionMode: state.permissionMode,
         modelMode: state.modelMode,
         effortLevel: state.effortLevel,
@@ -98,7 +105,8 @@ export const useNewSessionDraft = create<NewSessionDraftState>()((set, get) => (
     selectedMachineId: initial?.selectedMachineId ?? null,
     selectedPath: initial?.selectedPath ?? null,
     selectedProjectId: initial?.selectedProjectId ?? null,
-    agentType: initial?.agentType ?? 'claude',
+    agentType: initial?.agentType ?? DEFAULT_HARNESS,
+    agentTypeChosen: initial?.agentTypeChosen ?? false,
     permissionMode: initial?.permissionMode ?? null,
     modelMode: initial?.modelMode ?? null,
     effortLevel: initial?.effortLevel ?? null,
@@ -115,7 +123,8 @@ export const useNewSessionDraft = create<NewSessionDraftState>()((set, get) => (
     renameMachineId: (id) => { set({ selectedMachineId: id }); persist(get()); },
     setPath: (path) => { set({ selectedPath: path, selectedProjectId: null, worktreeKey: null }); persist(get()); },
     setProjectId: (id) => { set({ selectedProjectId: id, selectedPath: null, worktreeKey: null }); persist(get()); },
-    setAgentType: (agent) => { set({ agentType: agent }); persist(get()); },
+    setAgentType: (agent) => { set({ agentType: agent, agentTypeChosen: false }); persist(get()); },
+    chooseAgentType: (agent) => { set({ agentType: agent, agentTypeChosen: true }); persist(get()); },
     setPermissionMode: (mode) => { set({ permissionMode: mode }); persist(get()); },
     setModelMode: (mode) => { set({ modelMode: mode }); persist(get()); },
     setEffortLevel: (level) => { set({ effortLevel: level }); persist(get()); },
