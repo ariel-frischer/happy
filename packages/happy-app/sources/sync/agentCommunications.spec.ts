@@ -194,6 +194,17 @@ describe('canRenderAgentFormInline', () => {
             questions: [question({ options: [], allowCustom: true })],
         })).toBe(true);
     });
+
+    it('keeps choice forms that accept a written answer on the modal fallback', () => {
+        const withOther = {
+            id: 'other',
+            createdAt: 0,
+            kind: 'form' as const,
+            questions: [question(), question({ id: 'q2', allowCustom: true })],
+        };
+        expect(canRenderAgentFormInline(withOther)).toBe(false);
+        expect(shouldUseAgentQuestionFallback(withOther)).toBe(true);
+    });
 });
 
 describe('toggleOption', () => {

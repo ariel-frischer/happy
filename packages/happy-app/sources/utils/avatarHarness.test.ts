@@ -6,6 +6,7 @@ describe('resolveAvatarHarness', () => {
         expect(resolveAvatarHarness('claude')).toBe('claude');
         expect(resolveAvatarHarness('codex')).toBe('codex');
         expect(resolveAvatarHarness('agy')).toBe('agy');
+        expect(resolveAvatarHarness('omp')).toBe('omp');
     });
 
     it('uses Happy for the Rig client regardless of provider flavor', () => {

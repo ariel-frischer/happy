@@ -1,5 +1,6 @@
 import * as React from "react";
 import { View } from "react-native";
+import { Text } from "@/components/StyledText";
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from "expo-image";
 import { AvatarSkia } from "./AvatarSkia";
@@ -27,10 +28,12 @@ interface AvatarProps {
     thumbhash?: string | null;
 }
 
-const harnessIcons: Record<AvatarHarnessIcon, number> = {
+// Harnesses without a bundled logo render a text glyph instead (omp is Oh My Pi).
+const harnessIcons: Record<AvatarHarnessIcon, number | { glyph: string }> = {
     claude: require('@/assets/images/icon-claude.png'),
     codex: require('@/assets/images/icon-gpt.png'),
     agy: require('@/assets/images/icon-agy.png'),
+    omp: { glyph: 'π' },
     rig: require('@/assets/images/logo-black.png'),
 };
 
@@ -49,6 +52,26 @@ function harnessBadgeSizes(size: number, harness: AvatarHarnessIcon) {
                 ? Math.round(size * 0.34)
                 : Math.round(size * 0.42);
     return { circleSize, iconSize };
+}
+
+function HarnessBadgeGlyph({ harness, iconSize }: { harness: AvatarHarnessIcon; iconSize: number }) {
+    const { theme } = useUnistyles();
+    const icon = harnessIcons[harness];
+    if (typeof icon !== 'number') {
+        return (
+            <Text style={{ fontSize: Math.round(iconSize * 0.8), lineHeight: iconSize, fontWeight: '700', color: theme.colors.text }}>
+                {icon.glyph}
+            </Text>
+        );
+    }
+    return (
+        <Image
+            source={icon}
+            style={{ width: iconSize, height: iconSize }}
+            contentFit="contain"
+            tintColor={harness === 'codex' || harness === 'rig' ? theme.colors.text : undefined}
+        />
+    );
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -126,7 +149,6 @@ export const Avatar = React.memo((props: AvatarProps) => {
 
         // Add harness icon overlay if enabled
         if (showHarnessIcon && effectiveHarness) {
-            const harnessIcon = harnessIcons[effectiveHarness];
             const { circleSize, iconSize } = harnessBadgeSizes(size, effectiveHarness);
 
             return (
@@ -138,12 +160,7 @@ export const Avatar = React.memo((props: AvatarProps) => {
                         alignItems: 'center',
                         justifyContent: 'center'
                     }]}>
-                        <Image
-                            source={harnessIcon}
-                            style={{ width: iconSize, height: iconSize }}
-                            contentFit="contain"
-                            tintColor={effectiveHarness === 'codex' || effectiveHarness === 'rig' ? theme.colors.text : undefined}
-                        />
+                        <HarnessBadgeGlyph harness={effectiveHarness} iconSize={iconSize} />
                     </View>
                 </View>
             );
@@ -163,15 +180,13 @@ export const Avatar = React.memo((props: AvatarProps) => {
         AvatarComponent = AvatarGradient;
     }
 
-    // Determine harness icon for generated avatars
-    const harnessIcon = effectiveHarness ? harnessIcons[effectiveHarness] : null;
     const { circleSize, iconSize } = effectiveHarness
         ? harnessBadgeSizes(size, effectiveHarness)
         : { circleSize: 0, iconSize: 0 };
 
     // Only wrap in a container when this caller explicitly opts into a badge
     // location and the session has an identifiable harness.
-    if (showHarnessIcon && effectiveHarness && harnessIcon) {
+    if (showHarnessIcon && effectiveHarness) {
         return (
             <View style={[styles.container, { width: size, height: size }]}>
                 <AvatarComponent {...avatarProps} size={size} />
@@ -181,12 +196,7 @@ export const Avatar = React.memo((props: AvatarProps) => {
                     alignItems: 'center',
                     justifyContent: 'center'
                 }]}>
-                    <Image
-                        source={harnessIcon}
-                        style={{ width: iconSize, height: iconSize }}
-                        contentFit="contain"
-                        tintColor={effectiveHarness === 'codex' || effectiveHarness === 'rig' ? theme.colors.text : undefined}
-                    />
+                    <HarnessBadgeGlyph harness={effectiveHarness} iconSize={iconSize} />
                 </View>
             </View>
         );

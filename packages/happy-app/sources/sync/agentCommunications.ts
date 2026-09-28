@@ -124,11 +124,15 @@ export function selectAgentFormCommunication(
     return null;
 }
 
-/** Choice forms can live directly in chat; text-only forms keep the modal fallback. */
+/**
+ * Choice forms can live directly in chat. The inline card has no free-text
+ * field, so text-only questions and questions that explicitly accept a
+ * written answer (e.g. an agent's "Other" choice) keep the modal fallback.
+ */
 export function canRenderAgentFormInline(communication: PendingAgentCommunication): boolean {
     return communication.kind === 'form'
         && communication.questions.length > 0
-        && communication.questions.every(question => question.options.length > 0);
+        && communication.questions.every(question => question.options.length > 0 && question.allowCustom !== true);
 }
 
 /**
