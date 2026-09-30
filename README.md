@@ -54,6 +54,116 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 3. Authenticate and start the daemon: `happy auth login`, then `happy daemon start` (after a rebuild: `happy daemon stop; happy daemon start`).
 4. Run `omp` as usual. The session appears in the app.
 
+**Daemon, server, and laptop restarts**
+
+The **Happy daemon** is a background process on your laptop. It connects the machine to Happy and handles requests to start sessions from the phone. The **Happy server** is the separate backend for encrypted sync between the CLI and app; `happy daemon start` starts the local daemon, not that server.
+
+Starting the daemon once does **not** install a boot/login service. It survives closing the terminal, but not a laptop reboot. Unless you separately configure autostart, run these on the laptop after restarting it:
+
+```bash
+happy daemon start
+happy daemon status
+```
+
+Then start `omp` as usual. If the app cannot start a session on your laptop after a reboot, check the local daemon before changing the app's server settings or logging in again. After rebuilding the fork's CLI, restart the daemon to load the new code:
+
+```bash
+happy daemon stop
+happy daemon start
+happy daemon status
+```
+
+### Optional: start automatically after login
+
+Authenticate first with `happy auth login`. Run **one** of the blocks below as your normal user, from a terminal where `happy`, `node`, and `omp` are on `PATH`. They save that terminal's `PATH` for the service; rerun setup if you move your CLI or change Node installations. Neither block installs or changes the Happy server.
+
+#### Linux (systemd)
+
+This requires a working systemd user manager. It starts after login, not before login; non-systemd distributions need their own session/init autostart mechanism.
+
+```bash
+bash <<'SETUP'
+set -eu
+command -v happy >/dev/null
+command -v node >/dev/null
+command -v omp >/dev/null
+service_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+mkdir -p "$service_dir"
+# Escape the saved PATH for a systemd quoted Environment value.
+service_path="${PATH//\\/\\\\}"
+service_path="${service_path//\"/\\\"}"
+service_path="${service_path//%/%%}"
+cat > "$service_dir/happy-omp-daemon.service" <<EOF
+[Unit]
+Description=Happy daemon for omp
+
+[Service]
+ExecStart=/usr/bin/env happy daemon start-sync
+Environment="PATH=$service_path"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+happy daemon stop
+systemctl --user daemon-reload
+systemctl --user enable happy-omp-daemon.service
+systemctl --user restart happy-omp-daemon.service
+systemctl --user status happy-omp-daemon.service --no-pager
+SETUP
+```
+
+For startup at boot **without logging in**, optionally run `loginctl enable-linger "$USER"` (your system may require administrator approval). This keeps your user services running after logout too; only enable it if that is what you want.
+
+After a CLI rebuild: `systemctl --user restart happy-omp-daemon.service`. Logs: `journalctl --user -u happy-omp-daemon.service`. Disable autostart: `systemctl --user disable --now happy-omp-daemon.service`.
+
+#### macOS (LaunchAgent)
+
+This starts when you log into your macOS user account. No sudo or system-wide LaunchDaemon is needed. Do not use the old `sudo happy daemon install` path for this setup.
+
+```bash
+bash <<'SETUP'
+set -eu
+happy_bin="$(command -v happy)"
+command -v node >/dev/null
+command -v omp >/dev/null
+label="local.happy.omp-daemon"
+plist="$HOME/Library/LaunchAgents/$label.plist"
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs/Happy"
+xml_escape() {
+  printf '%s' "$1" | /usr/bin/sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
+cat > "$plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key><array>
+    <string>$(xml_escape "$happy_bin")</string>
+    <string>daemon</string><string>start-sync</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>$(xml_escape "$PATH")</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$(xml_escape "$HOME/Library/Logs/Happy/daemon.log")</string>
+  <key>StandardErrorPath</key><string>$(xml_escape "$HOME/Library/Logs/Happy/daemon.err")</string>
+</dict></plist>
+EOF
+plutil -lint "$plist"
+happy daemon stop
+launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$plist"
+launchctl print "gui/$(id -u)/$label"
+SETUP
+```
+
+After a CLI rebuild: `launchctl kickstart -k "gui/$(id -u)/local.happy.omp-daemon"`. Logs are in `~/Library/Logs/Happy/`. To disable autostart, run `launchctl bootout "gui/$(id -u)/local.happy.omp-daemon"` and remove `~/Library/LaunchAgents/local.happy.omp-daemon.plist`.
+
+With either service installed, use its restart command instead of `happy daemon stop; happy daemon start`. Check the Happy connection with `happy daemon status`. These services run the foreground `start-sync` command so the service manager owns the actual daemon process.
+
 <img width="5178" height="2364" alt="github" src="/.github/header.png" />
 
 
