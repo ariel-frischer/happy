@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useSession, useSessionMessages, useSetting } from "@/sync/storage";
 import { sync } from '@/sync/sync';
-import { ActivityIndicator, AppState, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, TextInput, View } from 'react-native';
 import { useCallback } from 'react';
 import { FlashList, FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
 import { useHeaderHeight } from '@/utils/responsive';
@@ -23,6 +23,7 @@ import { handleInvertedChatWheel } from '@/utils/invertedChatWheel';
 import { DiffSyntaxCell, SyntaxViewport, SYNTAX_VIEWABILITY } from './diff/syntax/viewport';
 import { RoundButton } from './RoundButton';
 import { t } from '@/text';
+import { ChatListVisibilityContext, offsetRevealingField } from './chatListVisibility';
 
 const SCROLL_THRESHOLD = 300;
 const DOCK_DETAILS_SHOW_OFFSET = 16;
@@ -803,52 +804,97 @@ const ChatListInternal = React.memo((props: {
         return () => node.removeEventListener('wheel', handler);
     }, [handoffListRevision, props.sessionId]);
 
+    // The focused inline answer field (see chatListVisibility). Revealed on
+    // focus and edits by the field itself, and here when the keyboard or the
+    // composer changes the list's bottom inset.
+    const containerRef = React.useRef<View>(null);
+    const focusedFieldRef = React.useRef<TextInput | null>(null);
+    const revealFrameRef = React.useRef<number | null>(null);
+    const insetsRef = React.useRef({ top: 0, bottom: 0 });
+    insetsRef.current = { top: props.headerOverlayHeight ?? 0, bottom: props.bottomContentInset ?? 0 };
+    const revealFocusedField = useCallback(() => {
+        if (!focusedFieldRef.current || revealFrameRef.current !== null) return;
+        // One measurement per frame: keystrokes, growth, and the keyboard
+        // settling arrive together.
+        revealFrameRef.current = requestAnimationFrame(() => {
+            revealFrameRef.current = null;
+            const field = focusedFieldRef.current;
+            const container = containerRef.current;
+            if (!field || !container) return;
+            container.measureInWindow((_listX, listY, _listWidth, listHeight) => {
+                field.measureInWindow((_fieldX, fieldY, _fieldWidth, fieldHeight) => {
+                    if (focusedFieldRef.current !== field || listHeight <= 0 || fieldHeight <= 0) return;
+                    const offset = offsetRevealingField({
+                        list: { y: listY, height: listHeight },
+                        field: { y: fieldY, height: fieldHeight },
+                        topInset: insetsRef.current.top,
+                        bottomInset: insetsRef.current.bottom,
+                        offset: scrollMetricsRef.current.offsetY,
+                    });
+                    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
+                });
+            });
+        });
+    }, []);
+    const keepFieldVisible = useCallback((field: TextInput | null) => {
+        focusedFieldRef.current = field;
+        if (field) revealFocusedField();
+    }, [revealFocusedField]);
+    React.useEffect(() => {
+        revealFocusedField();
+    }, [props.bottomContentInset, revealFocusedField]);
+    React.useEffect(() => () => {
+        if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
+    }, []);
+
     return (
-        <View style={{ flex: 1 }}>
-            <FlashList
-                key={`${props.sessionId}:${handoffListRevision}`}
-                ref={listRef}
-                data={listItems}
-                // See MAINTAIN_VISIBLE_CONTENT_POSITION: item 0 is the newest
-                // message and offset 0 is the bottom of the screen.
-                inverted
-                keyExtractor={keyExtractor}
-                getItemType={getItemType}
-                maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
-                // The measured dock inset lets the newest message scroll above
-                // the floating composer instead of stopping underneath it.
-                // paddingTop, not paddingBottom: the content container is
-                // inside the inverted transform, so its top edge is the bottom
-                // of the screen.
-                contentContainerStyle={{ paddingTop: 8 + (props.bottomContentInset ?? 0) }}
-                renderItem={renderItem}
-                viewabilityConfig={SYNTAX_VIEWABILITY}
-                onViewableItemsChanged={syntaxViewport.update}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-                onLayout={(event) => {
-                    scrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
-                    fillOlderRef.current();
-                    updateHeaderBackdropVisibility();
-                }}
-                onContentSizeChange={handleContentSizeChange}
-                // Swapped: the list's header sits at item 0, which an inverted
-                // list draws at the bottom of the screen.
-                ListHeaderComponent={<NewerEnd sessionId={props.sessionId} />}
-                ListFooterComponent={(
-                    <OlderEnd
-                        // The store's flag also pulses on background pages the
-                        // reader never sees; only a fetch this list waits on
-                        // shows, and a failure shows only while it applies.
-                        status={olderStatus}
-                        onAction={olderStatus === 'load-more' ? loadMoreOlder : retryOlder}
-                        topContentInset={props.topContentInset}
-                    />
-                )}
-                onLoad={handleLoad}
-            />
+        <View ref={containerRef} style={{ flex: 1 }}>
+            <ChatListVisibilityContext.Provider value={keepFieldVisible}>
+                <FlashList
+                    key={`${props.sessionId}:${handoffListRevision}`}
+                    ref={listRef}
+                    data={listItems}
+                    // See MAINTAIN_VISIBLE_CONTENT_POSITION: item 0 is the newest
+                    // message and offset 0 is the bottom of the screen.
+                    inverted
+                    keyExtractor={keyExtractor}
+                    getItemType={getItemType}
+                    maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
+                    // The measured dock inset lets the newest message scroll above
+                    // the floating composer instead of stopping underneath it.
+                    // paddingTop, not paddingBottom: the content container is
+                    // inside the inverted transform, so its top edge is the bottom
+                    // of the screen.
+                    contentContainerStyle={{ paddingTop: 8 + (props.bottomContentInset ?? 0) }}
+                    renderItem={renderItem}
+                    viewabilityConfig={SYNTAX_VIEWABILITY}
+                    onViewableItemsChanged={syntaxViewport.update}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                    onLayout={(event) => {
+                        scrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+                        fillOlderRef.current();
+                        updateHeaderBackdropVisibility();
+                    }}
+                    onContentSizeChange={handleContentSizeChange}
+                    // Swapped: the list's header sits at item 0, which an inverted
+                    // list draws at the bottom of the screen.
+                    ListHeaderComponent={<NewerEnd sessionId={props.sessionId} />}
+                    ListFooterComponent={(
+                        <OlderEnd
+                            // The store's flag also pulses on background pages the
+                            // reader never sees; only a fetch this list waits on
+                            // shows, and a failure shows only while it applies.
+                            status={olderStatus}
+                            onAction={olderStatus === 'load-more' ? loadMoreOlder : retryOlder}
+                            topContentInset={props.topContentInset}
+                        />
+                    )}
+                    onLoad={handleLoad}
+                />
+            </ChatListVisibilityContext.Provider>
             {showScrollButton && (
                 <View style={[
                     styles.scrollButtonContainer,
