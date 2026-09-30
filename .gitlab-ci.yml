@@ -1,0 +1,48 @@
+# Phone APKs build here, not on the laptop. The job only runs when a pipeline
+# is created with BUILD_APK=1 (see `pnpm apk:phone`), so pushes to the GitLab
+# remote spend no compute minutes.
+
+workflow:
+  rules:
+    - if: $BUILD_APK == "1"
+
+android-apk:
+  # SDK 36, build-tools 36.0.0, NDK 27.1.12297006, JDK 17, Node 22: the
+  # versions React Native 0.83 builds against.
+  image: reactnativecommunity/react-native-android:v20.1
+  # 4 vCPU / 16 GB (cost factor 2). The small runner's 8 GB does not fit
+  # Gradle's 6 GB heap next to Metro and the native compilers.
+  tags: [saas-linux-medium-amd64]
+  timeout: 2h
+  variables:
+    APP_ENV: preview
+    HAPPY_DISABLE_OTA: "1"
+    EXPO_NO_TELEMETRY: "1"
+    CI: "1"
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+    GRADLE_OPTS: -Dorg.gradle.daemon=false
+  cache:
+    key:
+      files: [pnpm-lock.yaml]
+    paths:
+      - .pnpm-store
+      - .gradle-home/caches
+      - .gradle-home/wrapper
+  script:
+    - corepack enable
+    - corepack prepare pnpm@10.11.0 --activate
+    - pnpm config set store-dir "$CI_PROJECT_DIR/.pnpm-store"
+    - pnpm install --frozen-lockfile
+    - cd packages/happy-app
+    - node ../../node_modules/expo/bin/cli prebuild --platform android --no-install
+    - cd android
+    - >-
+      NODE_ENV=production ./gradlew assembleRelease
+      -PreactNativeArchitectures=arm64-v8a
+      '-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g'
+      --max-workers=4 --console=plain
+    - mkdir -p "$CI_PROJECT_DIR/dist"
+    - cp app/build/outputs/apk/release/app-release.apk "$CI_PROJECT_DIR/dist/happy-preview-${CI_COMMIT_SHORT_SHA}.apk"
+  artifacts:
+    paths: [dist/]
+    expire_in: 7 days
