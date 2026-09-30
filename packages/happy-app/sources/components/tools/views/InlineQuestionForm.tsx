@@ -14,6 +14,7 @@ import {
 } from '@/sync/agentCommunications';
 import type { AgentQuestion, AgentQuestionAnswer } from '@/sync/storageTypes';
 import { ToolSectionView } from '../ToolSectionView';
+import { useKeepVisibleInChatList } from '../../chatListVisibility';
 
 export type InlineQuestion = AgentQuestion;
 
@@ -157,15 +158,12 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
                                 </View>
                             )}
                             {acceptsWrittenAnswer(question) && (
-                                <TextInput
-                                    style={[styles.customInput, !canInteract && styles.optionButtonDisabled]}
+                                <WrittenAnswerInput
                                     value={draft.custom}
                                     onChangeText={value => handleCustomChange(question.id, value)}
                                     placeholder={question.options.length > 0
                                         ? t('agentQuestion.ownAnswerPlaceholder')
                                         : t('agentQuestion.ownAnswer')}
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    multiline
                                     editable={canInteract}
                                 />
                             )}
@@ -212,6 +210,35 @@ export const InlineQuestionForm = React.memo<InlineQuestionFormProps>((props) =>
         </ToolSectionView>
     );
 });
+
+/** The written-answer field; stays on screen while typing inside the chat list. */
+function WrittenAnswerInput(props: {
+    value: string;
+    onChangeText: (value: string) => void;
+    placeholder: string;
+    editable: boolean;
+}) {
+    const { theme } = useUnistyles();
+    const keepVisible = useKeepVisibleInChatList();
+    return (
+        <TextInput
+            ref={keepVisible.ref}
+            style={[styles.customInput, !props.editable && styles.optionButtonDisabled]}
+            value={props.value}
+            onChangeText={value => {
+                props.onChangeText(value);
+                keepVisible.reveal();
+            }}
+            onFocus={keepVisible.reveal}
+            onBlur={keepVisible.release}
+            onContentSizeChange={keepVisible.reveal}
+            placeholder={props.placeholder}
+            placeholderTextColor={theme.colors.textSecondary}
+            multiline
+            editable={props.editable}
+        />
+    );
+}
 
 
 /**
