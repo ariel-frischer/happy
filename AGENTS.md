@@ -24,6 +24,14 @@ Why: an OTA channel serves whatever was published last, not whatever is on
 `main`. On 2026-09-20 a preview OTA from a stale worktree silently rolled four
 shipped fixes off every preview phone for hours. Git looked fine the whole time.
 
+## Phone test APKs
+
+Build APKs for Ariel's phone on GitLab CI with `pnpm apk:phone`, never with a
+local Gradle build or an emulator: the laptop's CPU cannot spare it. The command
+pushes the branch to the `gitlab` remote, runs the `android-apk` job, and sends
+the Drive link through ntfy. See `docs/phone-apk-ci.md`. A test APK is not a
+release; the release skill still governs EAS builds and OTA updates.
+
 ## Sync To Main
 
 When the user says `sync to main` or `synt to main`, they mean:

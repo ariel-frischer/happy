@@ -12,6 +12,7 @@ This folder documents how Happy works internally, with a focus on protocol, back
 - cli-architecture.md: CLI and daemon architecture and how they interact with the server.
 - multi-process.md: Deeper multi-replica Socket.IO + Redis streams behavior, failure modes, and integration-test history.
 - dev-environments.md: Local `environments/data/` workflow, lab-rat project provisioning, `env:cli` passthrough behavior, and daemon usage.
+- phone-apk-ci.md: Building the preview APK on GitLab CI and sending it to the phone (`pnpm apk:phone`).
 - session-protocol.md: Unified encrypted chat event protocol.
 - session-protocol-claude.md: Claude-specific session-protocol flow (local vs remote launchers, dedupe/restarts).
 - plans/provider-envelope-redesign.md: Proposed replacement for the current provider/session envelope design.
