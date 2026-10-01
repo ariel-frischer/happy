@@ -124,6 +124,9 @@ describe('modelModeOptions', () => {
         const models = getCodexModelModes();
         expect(models.map((model) => model.key)).toEqual([
             'gpt-6-astra',
+            'gpt-6.1-sol',
+            'gpt-6-sol',
+            'gpt-6-luna',
             'gpt-5.6-sol',
             'gpt-5.6-terra',
             'gpt-5.6-luna',
@@ -137,18 +140,22 @@ describe('modelModeOptions', () => {
 
         expect(withCustom.map((model) => model.key)).toEqual([
             'gpt-6-astra',
+            'gpt-6.1-sol',
+            'gpt-6-sol',
+            'gpt-6-luna',
             'gpt-5.6-sol',
             'gpt-5.6-terra',
             'gpt-5.6-luna',
             'my-workspace-model',
         ]);
-        expect(models).toHaveLength(4);
+        expect(models).toHaveLength(7);
         expect(includeConfiguredModel('claude', models, 'my-workspace-model')).toBe(models);
     });
 
     it('only offers the current-generation claude models', () => {
         const models = getClaudeModelModes();
         expect(models.map((model) => model.key)).toEqual([
+            'claude-opus-5-5',
             'claude-fable-5-1',
             'claude-fable-5',
             'claude-opus-5',
@@ -156,6 +163,7 @@ describe('modelModeOptions', () => {
             'claude-sonnet-5',
         ]);
         expect(models.map((model) => model.name)).toEqual([
+            'Opus 5.5',
             'Fable 5.1',
             'Fable 5',
             'Opus 5',
@@ -180,6 +188,10 @@ describe('modelModeOptions', () => {
             .toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
         expect(getEffortLevelsForModel('codex', 'gpt-5.6-luna').map((level) => level.key))
             .toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+        expect(getEffortLevelsForModel('codex', 'gpt-6.1-sol').map((level) => level.key))
+            .toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+        expect(getEffortLevelsForModel('codex', 'gpt-6-luna').map((level) => level.key))
+            .toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
     });
 
     it('falls back to the conservative codex range for an unknown model', () => {
@@ -200,10 +212,10 @@ describe('modelModeOptions', () => {
 
     it('uses code defaults for agent defaults', () => {
         expect(getDefaultPermissionModeKey('claude')).toBe('auto');
-        expect(getDefaultModelKey('claude')).toBe('claude-opus-5');
+        expect(getDefaultModelKey('claude')).toBe('claude-opus-5-5');
         expect(getDefaultEffortKey('claude')).toBe('medium');
         expect(getDefaultPermissionModeKey('codex')).toBe('auto');
-        expect(getDefaultModelKey('codex')).toBe('gpt-5.6-sol');
+        expect(getDefaultModelKey('codex')).toBe('gpt-6.1-sol');
         expect(getDefaultEffortKey('codex')).toBe('medium');
         expect(getDefaultPermissionModeKey('agy')).toBe('default');
         expect(getDefaultModelKey('agy')).toBe('Gemini 3.8 Flash');

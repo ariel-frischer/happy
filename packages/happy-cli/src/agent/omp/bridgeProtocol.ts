@@ -8,7 +8,7 @@
  */
 import { z } from 'zod';
 
-export const OMP_BRIDGE_PROTOCOL_VERSION = 5;
+export const OMP_BRIDGE_PROTOCOL_VERSION = 6;
 
 const OmpSessionInfoSchema = z.object({
   cwd: z.string(),
@@ -159,8 +159,8 @@ export type BridgeToExt =
   | { t: 'ask_answer'; id: string; results: OmpAskResultItem[] }
   /** The app dismissed an `ask` form; cancel the TUI dialog too. */
   | { t: 'ask_cancelled'; id: string }
-  /** The app archived/killed the mirror; omp keeps running unmirrored until the next session switch. */
-  | { t: 'detached'; reason: string }
+  /** The app archived, deleted, or stopped the session: quit omp. */
+  | { t: 'exit'; reason: string }
   | { t: 'error'; message: string; fatal: boolean };
 
 export function parseExtToBridgeLine(line: string): ExtToBridge | null {

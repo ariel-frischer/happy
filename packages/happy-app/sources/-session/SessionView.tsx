@@ -112,6 +112,12 @@ export const SessionView = React.memo((props: { id: string }) => {
         () => resolveSessionGitPresentation(headerSession?.metadata, gitStatus),
         [headerSession?.metadata, gitStatus],
     );
+    // Where the agent runs, then the branch or workspace: "~/repos/app · main".
+    const headerSubtitle = React.useMemo(() => {
+        const path = headerSession?.metadata?.path;
+        const cwd = path ? formatPathRelativeToHome(path, headerSession?.metadata?.homeDir) : undefined;
+        return [cwd, headerGit.subtitle].filter(Boolean).join(' · ') || undefined;
+    }, [headerSession?.metadata?.path, headerSession?.metadata?.homeDir, headerGit.subtitle]);
     const isDataReady = useIsDataReady();
     // Grouped by project, a chat is one tab of its checkout: the header names
     // the checkout, and the strip under it holds the checkout's chats.
@@ -526,7 +532,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                             : headerProps.title}
                         subtitle={showTabStrip
                             ? t('sessionsFilter.worktreeTabs', { count: worktree.tabCount })
-                            : headerSession && isDataReady ? headerGit.subtitle : undefined}
+                            : headerSession && isDataReady ? headerSubtitle : undefined}
                         gitChanges={headerSession && isDataReady ? headerGit.changes : null}
                         backdropVisible={headerBackdropVisible}
                         extraPathSegment={fileViewPath ?? undefined}

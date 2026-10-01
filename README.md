@@ -32,6 +32,7 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 - Sessions started from the phone run the omp TUI in a detached tmux session. Attach with `tmux attach -t happy-omp-<id>`. Without tmux, the daemon falls back to `happy acp omp`.
 - `ask` questions show inline in the chat and in the TUI at the same time. The first answer wins. After you submit, the card keeps the full questions and answers.
 - Tool calls show as compact cards. Tap a card to see its output. Stop in the app aborts the running turn; background jobs keep running.
+- Archive and Delete in the app quit the omp TUI too. Type `/exit` or `/quit` in the chat to quit omp from the phone; its session archives as omp exits.
 - Subagent runs show live progress on the task card (`2 subagents · 1 running · 1 done`). The card keeps counting after the task call returns with subagents still in the background.
 - Background jobs (async bash, background subagents) show in a strip above the input while they run. Each row has its own Stop; tap a row to open the card that started it. Each finished job adds a card with its output (`Subagent done · 1m 12s`).
 - `/compact`, `/model` and `/thinking` typed in the app run in the mirrored session. Other omp commands (`/new`, `/resume`, `/fork`, and so on) only run from the TUI: the app shows a note and nothing reaches the model. Unknown `/text` goes to the model as a normal message.
