@@ -25,7 +25,7 @@ const PUSH_BODY_MAX = 140;
 /** Total decoded image bytes one app message may hand to omp. */
 const APP_IMAGES_MAX_BYTES = 20 * 1024 * 1024;
 /** omp commands the extension runs when typed in the app (plus /compact, an app default). */
-const APP_SLASH_COMMANDS = ['model', 'thinking'];
+const APP_SLASH_COMMANDS = ['model', 'thinking', 'exit', 'quit'];
 
 type Mirror = {
   /** The omp session this mirrors. */
@@ -115,10 +115,11 @@ export async function runOmpBridge(): Promise<void> {
     logger.debug(`${LOG} closed Happy session ${mirror.opened.id}: ${reason}`);
   };
 
-  const detach = async (mirror: Mirror, reason: string) => {
+  /** The app put the session away: archive it here, then have omp quit. */
+  const exitOmp = async (mirror: Mirror, reason: string) => {
     if (mirror.closed) return;
     await closeMirror(mirror, reason);
-    send({ t: 'detached', reason });
+    send({ t: 'exit', reason });
   };
 
   const wire = (mirror: Mirror, session: ApiSessionClient) => {
@@ -149,10 +150,10 @@ export async function runOmpBridge(): Promise<void> {
     session.rpcHandlerManager.registerHandler<{ id?: unknown }, void>('cancelJob', async (params) => {
       if (!mirror.closed && typeof params?.id === 'string') send({ t: 'cancel_job', id: params.id });
     });
-    registerKillSessionHandler(session.rpcHandlerManager, () => detach(mirror, 'Stopped from the Happy app'));
+    registerKillSessionHandler(session.rpcHandlerManager, () => exitOmp(mirror, 'Stopped from the Happy app'));
     // The offline stub is not an EventEmitter; archive signals only come from a live socket.
     if (typeof session.on === 'function') {
-      session.on('archived', () => void detach(mirror, 'Archived from the Happy app'));
+      session.on('archived', () => void exitOmp(mirror, 'Archived from the Happy app'));
     }
   };
 
