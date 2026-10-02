@@ -8,8 +8,9 @@ the commit sha/timestamp the app config would otherwise read from git).
 
 A local google-services file named by HAPPY_GOOGLE_SERVICES_FILE is sent with
 each build and written into the source tree; nothing is stored in Modal except
-the Gradle cache on the `happy-apk-cache` Volume. The pnpm store stays off the
-Volume: installing from it (280s) was slower than downloading (150s).
+build caches on the `happy-apk-cache` Volume: Gradle's dependency and build
+caches and ccache for the native C++. The pnpm store stays off the Volume:
+installing from it (280s) was slower than downloading (150s).
 """
 
 import json
@@ -38,7 +39,7 @@ CACHE = "/cache"
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("openjdk-17-jdk-headless", "curl", "unzip", "xz-utils", "git", "ca-certificates")
+    .apt_install("openjdk-17-jdk-headless", "curl", "unzip", "xz-utils", "git", "ca-certificates", "ccache")
     # Set first: npm and sdkmanager need node and java on PATH while the image builds.
     .env(
         {
@@ -71,10 +72,11 @@ def step(name: str, cmd: list[str], cwd: Path, env: dict[str, str]) -> None:
     print(f"[{name}] done in {time.monotonic() - start:.0f}s", flush=True)
 
 
-# Every run recompiles everything (only dependencies are cached): Gradle took
-# 30 min on 8 CPUs and over 55 min on 16 with keyboard-controller 1.22, mostly
-# native C++. CPU-seconds cost the same either way, so more cores mainly buys
-# wall time; the 2 h timeout leaves headroom over a 60 min build.
+# A from-scratch Gradle build takes about an hour, mostly native C++. The
+# source always unpacks to /tmp/src, so cache keys stay stable between commits:
+# ccache (CMake reads the launcher from the environment) skips unchanged C++,
+# and --build-cache reuses Kotlin/Java/dex outputs. Both live on the Volume.
+# CPU-seconds cost the same on more cores, so 16 mainly buys wall time.
 @app.function(cpu=16, memory=24576, timeout=7200, volumes={CACHE: cache})
 def build(source: bytes, build_env: dict[str, str], files: dict[str, bytes]) -> bytes:
     src = Path("/tmp/src")
@@ -91,6 +93,12 @@ def build(source: bytes, build_env: dict[str, str], files: dict[str, bytes]) -> 
         "EXPO_NO_TELEMETRY": "1",
         "CI": "1",
         "GRADLE_USER_HOME": f"{CACHE}/gradle",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CCACHE_DIR": f"{CACHE}/ccache",
+        "CCACHE_MAXSIZE": "10G",
+        # the NDK's mtime changes with every image rebuild
+        "CCACHE_COMPILERCHECK": "content",
         **build_env,
     }
     try:
@@ -102,12 +110,13 @@ def build(source: bytes, build_env: dict[str, str], files: dict[str, bytes]) -> 
                 "./gradlew", "assembleRelease", "-PreactNativeArchitectures=arm64-v8a",
                 "-Dorg.gradle.jvmargs=-Xmx8g -XX:MaxMetaspaceSize=1g",
                 "-Pkotlin.compiler.execution.strategy=in-process",
-                "--max-workers=16", "--no-daemon", "--console=plain", "-q",
+                "--max-workers=16", "--no-daemon", "--build-cache", "--console=plain", "-q",
             ],
             app_dir / "android",
             {**env, "NODE_ENV": "production"},
         )
     finally:
+        subprocess.run(["ccache", "--show-stats"], env=env, check=False)
         cache.commit()
     return (app_dir / "android/app/build/outputs/apk/release/app-release.apk").read_bytes()
 
