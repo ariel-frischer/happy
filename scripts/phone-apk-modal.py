@@ -71,9 +71,11 @@ def step(name: str, cmd: list[str], cwd: Path, env: dict[str, str]) -> None:
     print(f"[{name}] done in {time.monotonic() - start:.0f}s", flush=True)
 
 
-# A cold Gradle build took 30 min on 8 CPUs, mostly native C++; CPU-seconds
-# cost the same either way, so more cores mainly buys wall time.
-@app.function(cpu=16, memory=24576, timeout=3600, volumes={CACHE: cache})
+# Every run recompiles everything (only dependencies are cached): Gradle took
+# 30 min on 8 CPUs and over 55 min on 16 with keyboard-controller 1.22, mostly
+# native C++. CPU-seconds cost the same either way, so more cores mainly buys
+# wall time; the 2 h timeout leaves headroom over a 60 min build.
+@app.function(cpu=16, memory=24576, timeout=7200, volumes={CACHE: cache})
 def build(source: bytes, build_env: dict[str, str], files: dict[str, bytes]) -> bytes:
     src = Path("/tmp/src")
     with tarfile.open(fileobj=BytesIO(source)) as archive:
