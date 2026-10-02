@@ -12,7 +12,7 @@ This folder documents how Happy works internally, with a focus on protocol, back
 - cli-architecture.md: CLI and daemon architecture and how they interact with the server.
 - multi-process.md: Deeper multi-replica Socket.IO + Redis streams behavior, failure modes, and integration-test history.
 - dev-environments.md: Local `environments/data/` workflow, lab-rat project provisioning, `env:cli` passthrough behavior, and daemon usage.
-- phone-apk-ci.md: Building the preview APK for the phone, on Modal, locally in a memory-capped cgroup, or on GitLab CI, and sending it (`pnpm apk:phone`).
+- phone-apk-ci.md: Building the preview APK for the phone (on Modal, locally in a memory-capped cgroup, or on GitLab CI), build numbers, and the Obtainium update feed (`pnpm apk:phone`).
 - fork-push-notifications.md: Pointing a fork's builds at its own Firebase + Expo projects for native push (`pnpm push:setup`).
 - session-protocol.md: Unified encrypted chat event protocol.
 - session-protocol-claude.md: Claude-specific session-protocol flow (local vs remote launchers, dedupe/restarts).

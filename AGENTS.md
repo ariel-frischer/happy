@@ -32,9 +32,10 @@ on Modal so the laptop never runs Gradle. Local Gradle builds pushed the laptop
 into systemd-oomd kills of agent terminals on 2026-10-01. `--local` is the
 fallback when Modal is unavailable: it builds in its own memory-capped systemd
 service and waits for the load average to drop. Never hand-run Gradle. Both
-upload the APK and send the Drive link through ntfy. A build takes longer
-than a 300-second tool call, so run it as a named `bash` service or with
-`setsid nohup … > build.log`. Never use an emulator. See
+publish the APK to the tailnet feed Ariel's phone updates from (Obtainium) and
+send an ntfy message. A build takes longer than a 300-second tool call, so
+run it as a named `bash` service or with `setsid nohup … > build.log`. Never
+use an emulator. See
 `docs/phone-apk-ci.md`. A test APK is not a release; the release skill still
 governs EAS builds and OTA updates.
 

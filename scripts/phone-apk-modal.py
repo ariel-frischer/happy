@@ -8,7 +8,8 @@ the commit sha/timestamp the app config would otherwise read from git).
 
 A local google-services file named by HAPPY_GOOGLE_SERVICES_FILE is sent with
 each build and written into the source tree; nothing is stored in Modal except
-the Gradle and pnpm download caches on the `happy-apk-cache` Volume.
+the Gradle cache on the `happy-apk-cache` Volume. The pnpm store stays off the
+Volume: installing from it (280s) was slower than downloading (150s).
 """
 
 import json
@@ -88,7 +89,6 @@ def build(source: bytes, build_env: dict[str, str], files: dict[str, bytes]) -> 
         "EXPO_NO_TELEMETRY": "1",
         "CI": "1",
         "GRADLE_USER_HOME": f"{CACHE}/gradle",
-        "npm_config_store_dir": f"{CACHE}/pnpm-store",
         **build_env,
     }
     try:
