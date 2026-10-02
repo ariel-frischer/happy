@@ -430,6 +430,8 @@ export const ru: TranslationStructure = {
         activeNow: 'Активен сейчас',
         unknown: 'неизвестно',
         unread: 'новые результаты',
+        working: 'работает',
+        done: 'готово',
     },
 
     time: {

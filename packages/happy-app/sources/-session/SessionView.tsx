@@ -48,7 +48,7 @@ import { AllFilesDiffView } from '@/components/AllFilesDiffView';
 import { FileViewPanel } from '@/components/FileViewPanel';
 import { GitFileStatus } from '@/sync/gitStatusFiles';
 import { useOverlayNav } from '@/-session/sessionOverlayNav';
-import { formatPathRelativeToHome, getResumeCommandBlock, getSessionAvatarId, getSessionName, useSessionStatus } from '@/utils/sessionUtils';
+import { formatPathRelativeToHome, getResumeCommandBlock, getSessionAvatarId, getSessionHeaderStatus, getSessionName, useSessionStatus } from '@/utils/sessionUtils';
 import { MISSING_SESSION, useSessionQuickActions } from '@/hooks/useSessionQuickActions';
 import { isVersionSupported, MINIMUM_CLI_VERSION } from '@/utils/versionUtils';
 import * as Clipboard from 'expo-clipboard';
@@ -534,6 +534,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                             ? t('sessionsFilter.worktreeTabs', { count: worktree.tabCount })
                             : headerSession && isDataReady ? headerSubtitle : undefined}
                         gitChanges={headerSession && isDataReady ? headerGit.changes : null}
+                        status={session && isDataReady ? getSessionHeaderStatus(session) : null}
                         backdropVisible={headerBackdropVisible}
                         extraPathSegment={fileViewPath ?? undefined}
                         rightSlot={(diffViewOpen || !!fileViewPath) ? headerRightSlot : headerRight}

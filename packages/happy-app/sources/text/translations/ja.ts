@@ -97,6 +97,8 @@ export const ja: TranslationStructure = {
         activeNow: 'アクティブ',
         unknown: '不明',
         unread: '新しい結果',
+        working: '作業中',
+        done: '完了',
     },
 
     time: {

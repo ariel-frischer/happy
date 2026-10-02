@@ -10,7 +10,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { MobileGlassSurface } from './MobileGlass';
 import { BubblePressable } from './BubblePressable';
 import { GitLineChanges } from './GitLineChanges';
+import { StatusDot } from './StatusDot';
 import type { VisibleRigGitLineChanges } from '@/utils/rigGitLineChanges';
+import type { SessionHeaderStatus } from '@/utils/sessionUtils';
 import {
     MOBILE_GLASS_CONTROL_RADIUS,
     MOBILE_GLASS_CONTROL_SIZE,
@@ -28,6 +30,8 @@ interface ChatHeaderViewProps {
     /** Workspace name when available, otherwise the git branch. */
     subtitle?: string;
     gitChanges?: VisibleRigGitLineChanges | null;
+    /** Agent status (working / needs you / done / offline) shown before the subtitle. */
+    status?: SessionHeaderStatus | null;
     /** Extra path segment appended to the title with a separator (used for the file-view overlay). */
     extraPathSegment?: string;
     /** Optional content rendered at the right edge of the header (used by file-view / diff overlays). */
@@ -46,6 +50,7 @@ export const ChatHeaderView: React.FC<ChatHeaderViewProps> = ({
     title,
     subtitle,
     gitChanges = null,
+    status = null,
     extraPathSegment,
     rightSlot,
     onTitlePress,
@@ -105,8 +110,26 @@ export const ChatHeaderView: React.FC<ChatHeaderViewProps> = ({
             >
                 {title || subtitle}
             </Text>
-            {(subtitle || gitChanges || hasExtra) && (
+            {(status || subtitle || gitChanges || hasExtra) && (
                 <View style={[styles.subtitleRow, glassEnabled && styles.mobileSubtitleRow]}>
+                    {status && (
+                        <View style={styles.status}>
+                            <StatusDot color={status.color} isPulsing={status.isPulsing} size={6} />
+                            <Text
+                                numberOfLines={1}
+                                style={[
+                                    styles.statusLabel,
+                                    glassEnabled && styles.mobileSubtitle,
+                                    { color: status.color, ...Typography.default('semiBold') },
+                                ]}
+                            >
+                                {status.label}
+                            </Text>
+                        </View>
+                    )}
+                    {status && !!subtitle && (
+                        <Text style={[styles.separator, { color: theme.colors.textSecondary, ...Typography.default() }]}>•</Text>
+                    )}
                     {!!subtitle && (
                         <Text
                             numberOfLines={1}
@@ -405,6 +428,16 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 12,
         lineHeight: 16,
         flexShrink: 1,
+    },
+    status: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        flexShrink: 0,
+    },
+    statusLabel: {
+        fontSize: 12,
+        lineHeight: 16,
     },
     separator: {
         fontSize: 12,
