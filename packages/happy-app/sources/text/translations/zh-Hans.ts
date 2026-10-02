@@ -97,6 +97,8 @@ export const zhHans: TranslationStructure = {
         activeNow: '当前活跃',
         unknown: '未知',
         unread: '新结果',
+        working: '工作中',
+        done: '已完成',
     },
 
     time: {

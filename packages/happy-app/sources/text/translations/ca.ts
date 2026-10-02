@@ -95,6 +95,8 @@ export const ca: TranslationStructure = {
         activeNow: 'Actiu ara',
         unknown: 'desconegut',
         unread: 'nous resultats',
+        working: 'treballant',
+        done: 'fet',
     },
 
     time: {

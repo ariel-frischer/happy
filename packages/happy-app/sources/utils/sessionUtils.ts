@@ -93,6 +93,40 @@ export function useSessionStatus(session: Session): SessionStatus {
     };
 }
 
+export interface SessionHeaderStatus {
+    label: string;
+    color: string;
+    isPulsing: boolean;
+}
+
+/**
+ * Short, stable status for the chat header: working, needs you, done, or
+ * offline. Unlike the composer label it never rotates, so a glance at the
+ * header always reads the same way for the same state.
+ */
+export function getSessionHeaderStatus(session: Session): SessionHeaderStatus {
+    const state = resolveSessionState({
+        agentState: session.agentState,
+        thinking: session.thinking,
+        isOnline: session.presence === 'online',
+    });
+    switch (state) {
+        case 'disconnected':
+            return { label: t('status.offline'), color: '#999', isPulsing: false };
+        case 'permission_required':
+            return { label: t('status.permissionRequired'), color: '#FF9500', isPulsing: true };
+        case 'input_required':
+            return { label: t('status.inputRequired'), color: '#FF9500', isPulsing: true };
+        case 'thinking':
+            return { label: t('status.working'), color: '#007AFF', isPulsing: true };
+        case 'waiting':
+            // A transient operation (compaction, retry) is still work in progress.
+            return session.agentState?.activity?.trim()
+                ? { label: t('status.working'), color: '#007AFF', isPulsing: true }
+                : { label: t('status.done'), color: '#34C759', isPulsing: false };
+    }
+}
+
 /**
  * Extracts a display name from a session's metadata path.
  * Returns the last segment of the path, or 'unknown' if no path is available.

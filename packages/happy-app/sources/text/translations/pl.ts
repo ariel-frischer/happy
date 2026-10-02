@@ -106,6 +106,8 @@ export const pl: TranslationStructure = {
         activeNow: 'Aktywny teraz',
         unknown: 'nieznane',
         unread: 'nowe wyniki',
+        working: 'pracuje',
+        done: 'gotowe',
     },
 
     time: {
