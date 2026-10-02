@@ -310,10 +310,10 @@ export function filterPermissionModesForCli<T extends ModeOption>(
     return modes.filter((mode) => modeSupportedByCli(mode, cliVersion));
 }
 
-// omp publishes its real modes and models over ACP once a session runs, and a
-// running session's menus read those from metadata. Before that there is
-// nothing to pick: "default" leaves the choice to omp's own configuration, and
-// any other key would be ignored by the ACP runner anyway.
+// A running omp session reports its real model and thinking level in metadata
+// (ACP: full catalogs; the interactive TUI bridge: the current values only),
+// and the composer reads those. Before that there is nothing to pick:
+// "default" leaves the choice to omp's own configuration.
 export function getOmpPermissionModes(): PermissionMode[] {
     return [
         { key: 'default', name: 'Default', description: null },
@@ -438,6 +438,12 @@ export function getAvailableModels(
         return models;
     }
     const metadataModels = mapMetadataOptions(metadata?.models);
+    // omp reports the model it actually runs; show that rather than a generic
+    // "Default model" even when it is missing from the published catalog.
+    const ompCurrentModel = flavor === 'omp' ? metadata?.currentModelCode : undefined;
+    if (ompCurrentModel && !metadataModels.some((model) => model.key === ompCurrentModel)) {
+        return [...metadataModels, { key: ompCurrentModel, name: ompCurrentModel.slice(ompCurrentModel.lastIndexOf('/') + 1), description: null }];
+    }
     if (metadataModels.length > 0) {
         if (flavor === 'codex' && !metadataModels.some((model) => model.key === 'default')) {
             return [{ key: 'default', name: 'default model', description: null }, ...metadataModels];
@@ -626,6 +632,11 @@ export function getEffortLevelsForModel(
     if (flavor === 'agy') {
         return getAgyEffortLevels(modelKey);
     }
+    // omp reports its thinking levels (the interactive bridge: just the current
+    // one); the app shows them but cannot set them.
+    if (flavor === 'omp') {
+        return mapMetadataOptions(metadata?.thoughtLevels);
+    }
     return [];
 }
 
@@ -667,4 +678,10 @@ export function truncateModelLabel(
     const lastSpace = cut.lastIndexOf(' ');
     const head = lastSpace >= max - 8 ? cut.slice(0, lastSpace) : cut.trimEnd();
     return `${head}…`;
+}
+
+/** "Opus 5.5 · high": the compact model and effort pair, for tight spots like the chat header. */
+export function formatModelEffortLabel(model: string | null | undefined, effort: string | null | undefined): string | null {
+    const parts = [model ? truncateModelLabel(model) : null, effort?.trim() || null].filter((part): part is string => !!part);
+    return parts.length > 0 ? parts.join(' · ') : null;
 }

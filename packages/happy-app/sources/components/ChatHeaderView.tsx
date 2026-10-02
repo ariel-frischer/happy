@@ -32,6 +32,8 @@ interface ChatHeaderViewProps {
     gitChanges?: VisibleRigGitLineChanges | null;
     /** Agent status (working / needs you / done / offline) shown before the subtitle. */
     status?: SessionHeaderStatus | null;
+    /** The agent's model and effort ("Opus 5.5 · high"), shown after the status. */
+    modelLabel?: string | null;
     /** Extra path segment appended to the title with a separator (used for the file-view overlay). */
     extraPathSegment?: string;
     /** Optional content rendered at the right edge of the header (used by file-view / diff overlays). */
@@ -51,6 +53,7 @@ export const ChatHeaderView: React.FC<ChatHeaderViewProps> = ({
     subtitle,
     gitChanges = null,
     status = null,
+    modelLabel = null,
     extraPathSegment,
     rightSlot,
     onTitlePress,
@@ -110,7 +113,7 @@ export const ChatHeaderView: React.FC<ChatHeaderViewProps> = ({
             >
                 {title || subtitle}
             </Text>
-            {(status || subtitle || gitChanges || hasExtra) && (
+            {(status || modelLabel || subtitle || gitChanges || hasExtra) && (
                 <View style={[styles.subtitleRow, glassEnabled && styles.mobileSubtitleRow]}>
                     {status && (
                         <View style={styles.status}>
@@ -127,7 +130,25 @@ export const ChatHeaderView: React.FC<ChatHeaderViewProps> = ({
                             </Text>
                         </View>
                     )}
-                    {status && !!subtitle && (
+                    {status && !!modelLabel && (
+                        <Text style={[styles.separator, { color: theme.colors.textSecondary, ...Typography.default() }]}>•</Text>
+                    )}
+                    {!!modelLabel && (
+                        <View style={styles.model}>
+                            <Ionicons name="hardware-chip-outline" size={11} color={subtitleColor} />
+                            <Text
+                                numberOfLines={1}
+                                style={[
+                                    styles.modelLabel,
+                                    glassEnabled && styles.mobileSubtitle,
+                                    { color: subtitleColor, ...Typography.default() },
+                                ]}
+                            >
+                                {modelLabel}
+                            </Text>
+                        </View>
+                    )}
+                    {(status || modelLabel) && !!subtitle && (
                         <Text style={[styles.separator, { color: theme.colors.textSecondary, ...Typography.default() }]}>•</Text>
                     )}
                     {!!subtitle && (
@@ -434,6 +455,19 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         gap: 4,
         flexShrink: 0,
+    },
+    // Bounded by the chip's truncation already; the path beside it gives way first.
+    model: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        flexShrink: 0,
+        maxWidth: '55%',
+    },
+    modelLabel: {
+        fontSize: 12,
+        lineHeight: 16,
+        flexShrink: 1,
     },
     statusLabel: {
         fontSize: 12,

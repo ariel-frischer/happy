@@ -8,6 +8,7 @@ import { layout } from '@/components/layout';
 import {
     getEffortLevelsForModel,
     EffortLevel,
+    formatModelEffortLabel,
 } from '@/components/modelModeOptions';
 import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderView } from '@/components/ChatHeaderView';
@@ -118,6 +119,14 @@ export const SessionView = React.memo((props: { id: string }) => {
         const cwd = path ? formatPathRelativeToHome(path, headerSession?.metadata?.homeDir) : undefined;
         return [cwd, headerGit.subtitle].filter(Boolean).join(' · ') || undefined;
     }, [headerSession?.metadata?.path, headerSession?.metadata?.homeDir, headerGit.subtitle]);
+    // omp reports the model and effort it runs; the header names them too.
+    const headerModes = useComposerModes(session);
+    const headerModelLabel = session?.metadata?.flavor === 'omp'
+        ? formatModelEffortLabel(
+            session.metadata.currentModelCode ? headerModes.modelMode?.name : null,
+            headerModes.effortLevel?.name,
+        )
+        : null;
     const isDataReady = useIsDataReady();
     // Grouped by project, a chat is one tab of its checkout: the header names
     // the checkout, and the strip under it holds the checkout's chats.
@@ -535,6 +544,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                             : headerSession && isDataReady ? headerSubtitle : undefined}
                         gitChanges={headerSession && isDataReady ? headerGit.changes : null}
                         status={session && isDataReady ? getSessionHeaderStatus(session) : null}
+                        modelLabel={isDataReady ? headerModelLabel : null}
                         backdropVisible={headerBackdropVisible}
                         extraPathSegment={fileViewPath ?? undefined}
                         rightSlot={(diffViewOpen || !!fileViewPath) ? headerRightSlot : headerRight}

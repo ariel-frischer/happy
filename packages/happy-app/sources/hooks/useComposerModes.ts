@@ -71,13 +71,17 @@ export function useComposerModes(session: Session | null | undefined): ComposerM
         ])
     ), [availableModes, session?.permissionMode, effectiveAgentDefaults.permissionMode, metadata?.currentOperatingModeCode, metadata?.permissionMode, metadata?.session?.permissionMode, isRig]);
 
+    // omp reports the model and thinking level it actually runs, which change in
+    // the TUI behind the app's back, so those beat any pick recorded here.
+    const isOmp = flavor === 'omp';
     const modelMode = React.useMemo<ModelMode | null>(() => (
         resolveCurrentOption(availableModels, [
+            isOmp ? metadata?.currentModelCode : undefined,
             session?.modelMode,
             isRig ? getRigCurrentModelOptionKey(metadata) : effectiveAgentDefaults.modelMode,
             isRig ? undefined : metadata?.currentModelCode,
         ])
-    ), [availableModels, session?.modelMode, effectiveAgentDefaults.modelMode, metadata, isRig]);
+    ), [availableModels, session?.modelMode, effectiveAgentDefaults.modelMode, metadata, isRig, isOmp]);
 
     const modelKey = modelMode?.key ?? 'default';
     const availableEffortLevels = React.useMemo<EffortLevel[]>(() => (
@@ -85,10 +89,11 @@ export function useComposerModes(session: Session | null | undefined): ComposerM
     ), [flavor, modelKey, metadata]);
     const effortLevel = React.useMemo<EffortLevel | null>(() => (
         resolveCurrentOption(availableEffortLevels, [
+            isOmp ? metadata?.currentThoughtLevelCode : undefined,
             session?.effortLevel,
             isRig ? getRigReasoningSelection(metadata, modelKey) : effectiveAgentDefaults.effortLevel,
         ])
-    ), [availableEffortLevels, session?.effortLevel, effectiveAgentDefaults.effortLevel, metadata, modelKey, isRig]);
+    ), [availableEffortLevels, session?.effortLevel, effectiveAgentDefaults.effortLevel, metadata, modelKey, isRig, isOmp]);
 
     return {
         availableModes,
