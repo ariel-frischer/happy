@@ -23,9 +23,12 @@ always has a higher number. The app shows it in Settings next to the version
 
 Without `--no-send`, the script copies the APK into `~/.local/share/happy-apk`
 (override with `HAPPY_APK_FEED_DIR`), keeps the newest five, rewrites its
-`index.html` to link only the newest one, and serves the directory on the
-tailnet with `tailscale serve --set-path /happy-apk` (HTTPS, tailnet only,
-added once and persisted by tailscaled). It then sends an ntfy message whose
+`index.html` to link only the newest one, and publishes the directory on the
+tailnet at `/happy-apk` (HTTPS, tailnet only). Serving a directory directly
+with `tailscale serve` needs root, so the script installs a user service,
+`happy-apk-feed.service` (`python3 -m http.server` on 127.0.0.1:8798), and
+points `tailscale serve --set-path /happy-apk` at it; both persist across
+reboots. It then sends an ntfy message whose
 tap opens the APK link directly.
 
 [Obtainium](https://github.com/ImranR98/Obtainium) on the phone watches that
