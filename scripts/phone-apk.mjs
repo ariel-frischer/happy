@@ -19,8 +19,8 @@
 // config from $HAPPY_PUSH_DIR/push.env when present
 // (docs/fork-push-notifications.md).
 //
-// Needs: `tailscale` (the feed is proxied with `tailscale serve`), systemd
-// user services (a static file server for the feed), and an ntfy
+// Needs: `tailscale` (the feed is served on this machine's tailnet IP by a
+// systemd user service, a static file server), and an ntfy
 // config at NTFY_CONFIG (default ~/.omp/agent/ntfy-push.json:
 // { server, topic, token? }).
 // --local also needs JDK 17 via mise and the Android SDK at ANDROID_HOME
@@ -37,13 +37,12 @@ const PROJECT = 'ariel-frischer%2Fhappy';
 const API = `https://gitlab.com/api/v4/projects/${PROJECT}`;
 const JOB = 'android-apk';
 const POLL_MS = 30_000;
-// The Obtainium feed: a directory served at https://<this machine>/happy-apk/
-// on the tailnet. index.html links only the newest APK; older ones stay
-// downloadable until pruned. Serving a directory straight from
-// `tailscale serve` needs root, so a user service serves it on loopback and
-// tailscale proxies to that.
+// The Obtainium feed: a directory served at http://<tailnet IP>:8798/ by a
+// user service bound to the tailnet address only (the same plain-HTTP link
+// handup's APK uses; the ts.net HTTPS name did not open on the phone).
+// index.html links only the newest APK; older ones stay downloadable until
+// pruned.
 const FEED_DIR = process.env.HAPPY_APK_FEED_DIR || join(homedir(), '.local/share/happy-apk');
-const FEED_PATH = '/happy-apk';
 const FEED_KEEP = 5;
 const FEED_PORT = 8798;
 const FEED_UNIT = 'happy-apk-feed.service';
@@ -222,6 +221,7 @@ const notify = await fetch(`${ntfy.server}/${ntfy.topic}`, {
         Title: `Happy preview build ${buildNumber} ready (${branch} ${shortSha})`,
         Tags: 'package',
         Click: url,
+        Actions: `view, Download APK, ${url}`,
         ...(ntfy.token ? { Authorization: `Bearer ${ntfy.token}` } : {}),
     },
     body: `${apkName} is on the update feed: update it in Obtainium, or tap to download.`,
@@ -230,8 +230,7 @@ if (!notify.ok) throw new Error(`ntfy: ${notify.status} ${await notify.text()}`)
 console.log(`Published ${url}`);
 
 // Copies the APK into the feed, prunes old builds, points index.html at the
-// new one and makes sure `tailscale serve` exposes the feed. Returns the
-// APK's URL.
+// new one and makes sure the feed server is running. Returns the APK's URL.
 function publish() {
     mkdirSync(FEED_DIR, { recursive: true });
     copyFileSync(apkPath, join(FEED_DIR, apkName));
@@ -241,26 +240,23 @@ function publish() {
     writeFileSync(join(FEED_DIR, 'index.html'),
         `<!doctype html><title>Happy preview</title>\n<a href="${apkName}">${apkName}</a>\n`);
 
-    ensureFeedServer();
-    const proxy = `http://127.0.0.1:${FEED_PORT}`;
-    const serve = JSON.parse(run('tailscale', ['serve', 'status', '--json']) || '{}');
-    const served = Object.values(serve.Web ?? {}).some((host) => host.Handlers?.[FEED_PATH]?.Proxy === proxy);
-    if (!served) execFileSync('tailscale', ['serve', '--bg', '--set-path', FEED_PATH, proxy], { stdio: 'inherit' });
-
-    const host = JSON.parse(run('tailscale', ['status', '--json'])).Self.DNSName.replace(/\.$/, '');
-    return `https://${host}${FEED_PATH}/${apkName}`;
+    const ip = run('tailscale', ['ip', '-4']).split('\n')[0];
+    ensureFeedServer(ip);
+    return `http://${ip}:${FEED_PORT}/${apkName}`;
 }
 
-// Installs and starts the loopback file server behind the feed (a user unit,
-// so it comes back after a reboot like the persisted `tailscale serve`).
-function ensureFeedServer() {
+// Installs and starts the feed's file server as a user unit bound to the
+// tailnet IP, so it is unreachable from other networks and comes back after a
+// reboot (retrying until tailscale has the address).
+function ensureFeedServer(ip) {
     const unitPath = join(homedir(), '.config/systemd/user', FEED_UNIT);
     const unit = `[Unit]
-Description=Happy preview APK feed (proxied by tailscale serve at ${FEED_PATH})
+Description=Happy preview APK feed (tailnet only)
 
 [Service]
-ExecStart=/usr/bin/env python3 -m http.server ${FEED_PORT} --bind 127.0.0.1 --directory ${FEED_DIR}
-Restart=on-failure
+ExecStart=/usr/bin/env python3 -m http.server ${FEED_PORT} --bind ${ip} --directory ${FEED_DIR}
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=default.target
