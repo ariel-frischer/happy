@@ -27,18 +27,15 @@ shipped fixes off every preview phone for hours. Git looked fine the whole time.
 ## Phone test APKs
 
 GitLab CI builds are paused (since 2026-10-01, Ariel's call): build APKs for
-Ariel's phone locally, and only when the CPU is not busy (1-minute load
-average below half of `nproc`; otherwise wait and recheck). Build the same
-`preview` variant as the `android-apk` job in `.gitlab-ci.yml` (JDK 17 via
-`mise where java@temurin-17…`, `APP_ENV=preview HAPPY_DISABLE_OTA=1`,
-`assembleRelease -PreactNativeArchitectures=arm64-v8a`, `nice -n 10`, at most 4
-workers) from a clean detached worktree of the commit. Run Gradle detached
-(`setsid nohup … > build.log`): a cold build outlives a 300-second tool call.
-Then upload it with `gog drive upload` and send the Drive link through ntfy
-(`~/.omp/agent/ntfy-push.json`), as `scripts/phone-apk.mjs` does. Never use an
-emulator. When GitLab builds resume, `pnpm apk:phone` is the path again; see
-`docs/phone-apk-ci.md`. A test APK is not a release; the release skill still
-governs EAS builds and OTA updates.
+Ariel's phone locally with `pnpm apk:phone --local`, never with a hand-run
+Gradle. It builds the committed `HEAD` in its own memory-capped systemd
+service, so an out-of-memory build dies alone instead of taking the terminal
+and agent session with it (systemd-oomd did that on 2026-10-01). It also waits
+for the load average to drop, then uploads the APK and sends the Drive link
+through ntfy. A cold build takes longer than a 300-second tool call, so run
+it as a named `bash` service or with `setsid nohup … > build.log`. Never use
+an emulator. See `docs/phone-apk-ci.md`. A test APK is not a release; the
+release skill still governs EAS builds and OTA updates.
 
 ## Sync To Main
 
