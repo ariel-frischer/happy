@@ -843,7 +843,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const isCodex = !isRig && (props.metadata?.flavor === 'codex' || props.agentType === 'codex');
     const isGemini = props.metadata?.flavor === 'gemini' || props.agentType === 'gemini';
     const isOpenClaw = props.metadata?.flavor === 'openclaw' || props.agentType === 'openclaw';
-    // omp reports the model and effort it runs; the app shows them read-only.
+    // omp reports the model and effort it runs; only the effort can be switched from the app.
     const isOmp = props.metadata?.flavor === 'omp';
     const displayPermissionMode = React.useMemo(() => (
         props.permissionMode ? hackMode(props.permissionMode) : null
@@ -1395,7 +1395,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         </>
     );
 
-    // No menu to open (omp sets effort in its TUI), but the level is still worth showing.
+    // No menu to open (omp reported no levels), but the level is still worth showing.
     const readOnlyEffortLabel = isOmp && !effortSettingsGroup ? effortLabel : undefined;
 
     const renderEffortValue = () => (

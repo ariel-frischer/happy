@@ -900,6 +900,15 @@ export async function sessionCancelBackgroundJob(sessionId: string, jobId: strin
 }
 
 /**
+ * Switches a live omp session's thinking level. omp owns the level, so this
+ * goes to its bridge rather than into session metadata; the chip follows the
+ * `currentThoughtLevelCode` omp reports back.
+ */
+export async function sessionSetOmpThinkingLevel(sessionId: string, level: string): Promise<void> {
+    await apiSocket.sessionRPC(sessionId, 'setThinkingLevel', { level });
+}
+
+/**
  * Puts a picture already uploaded to the session's attachment store onto the
  * bot behind a Happy Agent session. The agent downloads it by ref the way it
  * downloads a picture attached to a message, so nothing else travels here.

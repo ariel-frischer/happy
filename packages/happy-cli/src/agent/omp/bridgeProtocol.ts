@@ -29,6 +29,8 @@ const ConfigEventSchema = z.object({
   model: z.object({ code: z.string(), name: z.string() }).optional(),
   /** omp ThinkingLevel (off, minimal, low, medium, high, xhigh, max). */
   thinkingLevel: z.string().optional(),
+  /** The levels the current model accepts, in omp's order; older extensions omit it. */
+  thinkingLevels: z.array(z.string()).optional(),
 });
 export type OmpConfig = Omit<z.infer<typeof ConfigEventSchema>, 't'>;
 
@@ -175,6 +177,11 @@ export type BridgeToExt =
   | { t: 'ask_answer'; id: string; results: OmpAskResultItem[] }
   /** The app dismissed an `ask` form; cancel the TUI dialog too. */
   | { t: 'ask_cancelled'; id: string }
+  /**
+   * The app picked a thinking level. Older extensions ignore unknown messages,
+   * so this needs no protocol version bump.
+   */
+  | { t: 'set_thinking'; level: string }
   /** The app archived, deleted, or stopped the session: quit omp. */
   | { t: 'exit'; reason: string }
   | { t: 'error'; message: string; fatal: boolean };

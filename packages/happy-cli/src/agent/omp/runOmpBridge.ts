@@ -153,6 +153,10 @@ export async function runOmpBridge(): Promise<void> {
     session.rpcHandlerManager.registerHandler<{ id?: unknown }, void>('cancelJob', async (params) => {
       if (!mirror.closed && typeof params?.id === 'string') send({ t: 'cancel_job', id: params.id });
     });
+    // The composer's effort picker; omp answers with a `config` that moves the chip.
+    session.rpcHandlerManager.registerHandler<{ level?: unknown }, void>('setThinkingLevel', async (params) => {
+      if (!mirror.closed && typeof params?.level === 'string') send({ t: 'set_thinking', level: params.level });
+    });
     registerKillSessionHandler(session.rpcHandlerManager, () => exitOmp(mirror, 'Stopped from the Happy app'));
     // The offline stub is not an EventEmitter; archive signals only come from a live socket.
     if (typeof session.on === 'function') {

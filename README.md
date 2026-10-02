@@ -36,7 +36,7 @@ This is Ariel's personal, experimental fork of [slopus/happy](https://github.com
 - Subagent runs show live progress on the task card (`2 subagents · 1 running · 1 done`). The card keeps counting after the task call returns with subagents still in the background.
 - Background jobs (async bash, background subagents) show in a strip above the input while they run. Each row has its own Stop; tap a row to open the card that started it. Each finished job adds a card with its output (`Subagent done · 1m 12s`).
 - `/compact`, `/model` and `/thinking` typed in the app run in the mirrored session. Other omp commands (`/new`, `/resume`, `/fork`, and so on) only run from the TUI: the app shows a note and nothing reaches the model. Unknown `/text` goes to the model as a normal message.
-- The composer and the chat header show the mirrored session's current model and thinking level (`Opus 5.5 · high`). They follow changes made in the TUI within a few seconds. Change them with `/model` and `/thinking`; the app has no picker for them.
+- The composer and the chat header show the mirrored session's current model and thinking level (`Opus 5.5 · high`). They follow changes made in the TUI within a few seconds. Tap the effort to switch the thinking level among the ones the model accepts; change the model with `/model`.
 - `/resume` in the TUI reattaches the omp session to the Happy session it was mirrored to before. A session that was never mirrored gets a new Happy session with its recent history backfilled.
 - Images from tool results show inline, and a tap opens them fullscreen. Images you attach in the app reach omp.
 - Deleting or stopping a mirrored session in the app detaches the mirror. The TUI keeps running.
