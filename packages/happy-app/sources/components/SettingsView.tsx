@@ -31,6 +31,7 @@ import { t } from '@/text';
 type BuildConfig = {
     buildCommitSha?: unknown;
     buildCommitTimestamp?: unknown;
+    buildNumber?: unknown;
 };
 
 function getBuildConfig(): BuildConfig {
@@ -84,11 +85,12 @@ export const SettingsView = React.memo(function SettingsView({
     const runtimeVersion = typeof Constants.expoConfig?.runtimeVersion === 'string'
         ? Constants.expoConfig.runtimeVersion
         : undefined;
+    const buildConfig = getBuildConfig();
     const versionDetail = [
-        appVersion,
+        typeof buildConfig.buildNumber === 'string' ? `${appVersion} build ${buildConfig.buildNumber}` : appVersion,
         runtimeVersion ? `runtime ${runtimeVersion}` : undefined,
     ].filter(Boolean).join(' / ');
-    const versionSubtitle = formatBuildSubtitle(getBuildConfig());
+    const versionSubtitle = formatBuildSubtitle(buildConfig);
     const auth = useAuth();
     const [devModeEnabled, setDevModeEnabled] = useLocalSettingMutable('devModeEnabled');
     const isPro = __DEV__ || useEntitlement('pro');

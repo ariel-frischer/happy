@@ -27,15 +27,17 @@ shipped fixes off every preview phone for hours. Git looked fine the whole time.
 ## Phone test APKs
 
 GitLab CI builds are paused (since 2026-10-01, Ariel's call): build APKs for
-Ariel's phone locally with `pnpm apk:phone --local`, never with a hand-run
-Gradle. It builds the committed `HEAD` in its own memory-capped systemd
-service, so an out-of-memory build dies alone instead of taking the terminal
-and agent session with it (systemd-oomd did that on 2026-10-01). It also waits
-for the load average to drop, then uploads the APK and sends the Drive link
-through ntfy. A cold build takes longer than a 300-second tool call, so run
-it as a named `bash` service or with `setsid nohup … > build.log`. Never use
-an emulator. See `docs/phone-apk-ci.md`. A test APK is not a release; the
-release skill still governs EAS builds and OTA updates.
+Ariel's phone with `pnpm apk:phone --modal`, which builds the committed `HEAD`
+on Modal so the laptop never runs Gradle. Local Gradle builds pushed the laptop
+into systemd-oomd kills of agent terminals on 2026-10-01. `--local` is the
+fallback when Modal is unavailable: it builds in its own memory-capped systemd
+service and waits for the load average to drop. Never hand-run Gradle. Both
+publish the APK to the tailnet feed Ariel's phone updates from (Obtainium) and
+send an ntfy message. A build takes longer than a 300-second tool call, so
+run it as a named `bash` service or with `setsid nohup … > build.log`. Never
+use an emulator. See
+`docs/phone-apk-ci.md`. A test APK is not a release; the release skill still
+governs EAS builds and OTA updates.
 
 ## Sync To Main
 

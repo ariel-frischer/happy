@@ -46,10 +46,17 @@ function loadBuildMetadata() {
         (commitSha
             ? git(['show', '-s', '--format=%cI', commitSha])
             : git(['show', '-s', '--format=%cI', 'HEAD']));
+    // Commit count of the built commit: grows with every commit on main, so
+    // test APKs can be told apart at a glance (scripts/phone-apk.mjs sets it
+    // for builds without a full git history).
+    const buildNumber =
+        process.env.HAPPY_BUILD_NUMBER ||
+        git(['rev-list', '--count', commitSha || 'HEAD']);
 
     return {
         commitSha,
         commitTimestamp,
+        buildNumber,
     };
 }
 
@@ -241,6 +248,7 @@ export default {
                 consoleLoggingDefault,
                 buildCommitSha: buildMetadata.commitSha,
                 buildCommitTimestamp: buildMetadata.commitTimestamp,
+                buildNumber: buildMetadata.buildNumber,
             }
         },
         owner: expoOwner
