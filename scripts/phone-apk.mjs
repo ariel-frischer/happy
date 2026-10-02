@@ -229,11 +229,13 @@ const notify = await fetch(`${ntfy.server}/${ntfy.topic}`, {
 if (!notify.ok) throw new Error(`ntfy: ${notify.status} ${await notify.text()}`);
 console.log(`Published ${url}`);
 
-// Copies the APK into the feed, prunes old builds, points index.html at the
-// new one and makes sure the feed server is running. Returns the APK's URL.
+// Moves the APK into the feed (no copy stays in .worktrees/apk, so sent
+// builds don't pile up in the repo), prunes old builds, points index.html at
+// the new one and makes sure the feed server is running. Returns the APK's URL.
 function publish() {
     mkdirSync(FEED_DIR, { recursive: true });
     copyFileSync(apkPath, join(FEED_DIR, apkName));
+    rmSync(apkPath);
     const build = (name) => Number(name.match(/^happy-preview-(\d+)-/)?.[1] ?? -1);
     const apks = readdirSync(FEED_DIR).filter((name) => build(name) >= 0).sort((a, b) => build(b) - build(a));
     for (const old of apks.slice(FEED_KEEP)) rmSync(join(FEED_DIR, old));
