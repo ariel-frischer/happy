@@ -57,8 +57,9 @@ locally as for the other paths. The APK is signed with the same Expo template de
 keystore as local and CI builds, so it installs over them.
 
 The first build on 8 CPUs took about 37 minutes (install 2.5, Gradle 30,
-mostly native C++). Run it as a named background service or with
-`setsid nohup`.
+mostly native C++); later builds have taken close to an hour, since every run
+recompiles from scratch. The Modal function's timeout is 2 hours. Run it as a
+named background service or with `setsid nohup`.
 
 The image (Debian, OpenJDK 17, Node 24, pnpm 10.11.0, Android SDK 36 with
 NDK 27.1.12297006) is built once and reused. The `happy-apk-cache` Volume
@@ -68,6 +69,10 @@ stored in Modal: the `HAPPY_*` push config and the google-services file from
 `$HAPPY_PUSH_DIR/push.env` travel with each build.
 
 Needs `uv` and a Modal token (`uvx --from modal modal token new`).
+
+Killing the local process can leave the Modal container running and
+billing. Check with `uvx --from modal modal app list` and stop it with
+`uvx --from modal modal app stop -y <app id>`.
 
 ## Local build
 
