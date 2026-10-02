@@ -2,6 +2,7 @@
 // Builds the preview APK and sends it to the phone: build, upload it to Google
 // Drive with `gog`, and push the private Drive link through ntfy.
 //
+//   pnpm apk:phone --modal     # build HEAD on Modal (cloud), nothing heavy runs here
 //   pnpm apk:phone --local     # build HEAD on this machine, memory-capped
 //   pnpm apk:phone             # build the current branch on GitLab CI
 //   add --no-send              # build only, keep the APK in .worktrees/apk/
@@ -16,8 +17,9 @@
 // Needs: `gog` signed in to Drive and an ntfy config at NTFY_CONFIG
 // (default ~/.omp/agent/ntfy-push.json: { server, topic, token? }).
 // --local also needs JDK 17 via mise and the Android SDK at ANDROID_HOME
-// (default ~/Android/Sdk); CI needs the `gitlab` remote and a GitLab token
-// (GITLAB_TOKEN or `glab auth`).
+// (default ~/Android/Sdk); --modal needs `uv` and a Modal token
+// (~/.modal.toml) and runs scripts/phone-apk-modal.py; CI needs the `gitlab`
+// remote and a GitLab token (GITLAB_TOKEN or `glab auth`).
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
@@ -34,6 +36,8 @@ const POLL_MS = 30_000;
 const LIMITS = ['MemoryHigh=9G', 'MemoryMax=11G', 'MemorySwapMax=4G', 'CPUQuota=800%', 'Nice=10'];
 const send = !process.argv.includes('--no-send');
 const local = process.argv.includes('--local');
+const modal = process.argv.includes('--modal');
+const MODAL_VERSION = '1.6.0';
 
 const run = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -100,6 +104,29 @@ function pushEnv() {
     return env;
 }
 
+// Sends a `git archive` of HEAD to scripts/phone-apk-modal.py, which builds
+// the same preview variant as --local on a Modal container and writes the APK
+// back. The push config travels in the environment, not argv or Modal secrets.
+function buildOnModal() {
+    const source = join(outDir, `src-${shortSha}.tar`);
+    const apkPath = join(outDir, `happy-preview-${shortSha}.apk`);
+    execFileSync('git', ['archive', '--format=tar', '-o', source, 'HEAD'], { stdio: 'inherit' });
+    const buildEnv = {
+        HAPPY_BUILD_COMMIT_SHA: run('git', ['rev-parse', 'HEAD']),
+        HAPPY_BUILD_COMMIT_TIMESTAMP: run('git', ['show', '-s', '--format=%cI', 'HEAD']),
+        ...pushEnv(),
+    };
+    try {
+        execFileSync('uvx', [
+            '--from', `modal==${MODAL_VERSION}`, 'modal', 'run', join(repo, 'scripts/phone-apk-modal.py'),
+            '--source', source, '--out', apkPath,
+        ], { stdio: 'inherit', env: { ...process.env, HAPPY_APK_ENV: JSON.stringify(buildEnv) } });
+    } finally {
+        rmSync(source, { force: true });
+    }
+    return apkPath;
+}
+
 async function buildLocally() {
     const cores = cpus().length;
     while (loadavg()[0] >= cores / 2) {
@@ -159,7 +186,7 @@ async function buildLocally() {
     }
 }
 
-const apkPath = local ? await buildLocally() : await buildOnGitlab();
+const apkPath = modal ? buildOnModal() : local ? await buildLocally() : await buildOnGitlab();
 const apkName = apkPath.split('/').pop();
 console.log(`APK ${apkPath}`);
 if (!send) process.exit(0);

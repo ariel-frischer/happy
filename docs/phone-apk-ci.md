@@ -1,16 +1,42 @@
 # Phone APKs
 
-Test APKs for the phone build either on this machine in a memory-capped
-cgroup (`--local`) or on GitLab's hosted runners. GitLab CI is paused for
-now, so `--local` is the default path.
+Test APKs for the phone build on Modal (`--modal`), on this machine in a
+memory-capped cgroup (`--local`), or on GitLab's hosted runners. GitLab CI is
+paused for now. `--modal` keeps the 8-10 GB Gradle build off the laptop
+entirely.
 
 ## Use
 
 ```sh
-pnpm apk:phone --local             # build HEAD here, upload to Drive, notify via ntfy
+pnpm apk:phone --modal             # build HEAD on Modal, upload to Drive, notify via ntfy
+pnpm apk:phone --local             # same, built here in a memory-capped cgroup
 pnpm apk:phone                     # same, built on GitLab CI from the current branch
-pnpm apk:phone --local --no-send   # build only, into .worktrees/apk/
+pnpm apk:phone --modal --no-send   # build only, into .worktrees/apk/
 ```
+
+## Modal build
+
+`--modal` sends a `git archive` of `HEAD` (committed code only) to
+`scripts/phone-apk-modal.py`, run with `uvx --from modal==1.6.0 modal run`
+under the `~/.modal.toml` profile. The Modal app `happy-apk` builds the same
+preview variant as `--local` (`pnpm install`, `expo prebuild`,
+`gradlew assembleRelease`, OTA disabled, arm64 only) in a container with
+16 CPUs and 24 GB, then writes the APK to
+`.worktrees/apk/happy-preview-<sha>.apk`; Drive upload and ntfy run locally as
+for the other paths. The APK is signed with the same Expo template debug
+keystore as local and CI builds, so it installs over them.
+
+The first build on 8 CPUs took about 37 minutes (install 2.5, Gradle 30,
+mostly native C++). Run it as a named background service or with
+`setsid nohup`.
+
+The image (Debian, OpenJDK 17, Node 24, pnpm 10.11.0, Android SDK 36 with
+NDK 27.1.12297006) is built once and reused. The `happy-apk-cache` Volume
+keeps the Gradle and pnpm download caches between builds. Nothing else is
+stored in Modal: the `HAPPY_*` push config and the google-services file from
+`$HAPPY_PUSH_DIR/push.env` travel with each build.
+
+Needs `uv` and a Modal token (`uvx --from modal modal token new`).
 
 ## Local build
 
@@ -28,7 +54,7 @@ the build, not the terminal that started it. Gradle runs with `--no-daemon`
 and compiles Kotlin in-process, and systemd kills anything still running when
 a step exits, so no JVM stays resident afterwards. Without these limits, a
 build on 2026-10-01 pushed the laptop to 90% RAM+swap, and `systemd-oomd`
-killed the whole kitty window, including the agent session.
+killed the whole kitty tab, including the agent session.
 
 If `$HAPPY_PUSH_DIR/push.env` exists (default `~/.config/happy-push`), its
 `HAPPY_*` values point the build at the fork's own Expo and Firebase projects;
