@@ -55,10 +55,18 @@ function loadBuildMetadata() {
 
 const buildMetadata = loadBuildMetadata();
 
+// Forks point push notifications (and OTA) at their own Expo + Firebase projects
+// through these variables instead of committing them; see
+// docs/fork-push-notifications.md. Unset, builds keep upstream's projects.
+const expoProjectId = process.env.HAPPY_EXPO_PROJECT_ID || "4558dd3d-cd5a-47cd-bad9-e591a241cc06";
+const expoOwner = process.env.HAPPY_EXPO_OWNER || "bulkacorp";
+const expoSlug = process.env.HAPPY_EXPO_SLUG || "happy";
+const googleServicesFile = process.env.HAPPY_GOOGLE_SERVICES_FILE || "./google-services.json";
+
 export default {
     expo: {
         name,
-        slug: "happy",
+        slug: expoSlug,
         version: "1.8.0",
         runtimeVersion: "21",
         orientation: "default",
@@ -112,7 +120,7 @@ export default {
                 "android.permission.READ_MEDIA_VIDEO",
             ],
             package: bundleId,
-            googleServicesFile: "./google-services.json",
+            googleServicesFile,
             intentFilters: variant === 'production' ? [
                 {
                     "action": "VIEW",
@@ -209,7 +217,7 @@ export default {
         ],
         // Sideloaded fork builds must not pull upstream OTA bundles over their own JS.
         updates: process.env.HAPPY_DISABLE_OTA === '1' ? { enabled: false } : {
-            url: "https://u.expo.dev/4558dd3d-cd5a-47cd-bad9-e591a241cc06",
+            url: `https://u.expo.dev/${expoProjectId}`,
             requestHeaders: {
                 "expo-channel-name": "production"
             }
@@ -222,7 +230,7 @@ export default {
                 root: "./sources/app"
             },
             eas: {
-                projectId: "4558dd3d-cd5a-47cd-bad9-e591a241cc06"
+                projectId: expoProjectId
             },
             app: {
                 postHogKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY,
@@ -235,6 +243,6 @@ export default {
                 buildCommitTimestamp: buildMetadata.commitTimestamp,
             }
         },
-        owner: "bulkacorp"
+        owner: expoOwner
     }
 };

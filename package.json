@@ -10,6 +10,7 @@
         "screenshots:compose": "node scripts/app-store/compose.mjs",
         "screenshots:capture:android": "node scripts/app-store/android-capture.mjs",
         "apk:phone": "node scripts/phone-apk.mjs",
+        "push:setup": "node scripts/push-credentials.mjs",
         "postinstall": "node ./scripts/postinstall.cjs",
         "env:new": "tsx environments/environments.ts new",
         "env:list": "tsx environments/environments.ts list",

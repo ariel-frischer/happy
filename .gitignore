@@ -79,3 +79,7 @@ happy-workspaces/
 
 .context/
 .happy-tmp/
+
+# Fork push credentials belong in ~/.config/happy-push (docs/fork-push-notifications.md)
+push.env
+*service-account*.json
