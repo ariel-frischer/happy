@@ -19,7 +19,8 @@
 // config from $HAPPY_PUSH_DIR/push.env when present
 // (docs/fork-push-notifications.md).
 //
-// Needs: `tailscale` (the feed is served with `tailscale serve`) and an ntfy
+// Needs: `tailscale` (the feed is proxied with `tailscale serve`), systemd
+// user services (a static file server for the feed), and an ntfy
 // config at NTFY_CONFIG (default ~/.omp/agent/ntfy-push.json:
 // { server, topic, token? }).
 // --local also needs JDK 17 via mise and the Android SDK at ANDROID_HOME
@@ -38,10 +39,14 @@ const JOB = 'android-apk';
 const POLL_MS = 30_000;
 // The Obtainium feed: a directory served at https://<this machine>/happy-apk/
 // on the tailnet. index.html links only the newest APK; older ones stay
-// downloadable until pruned.
+// downloadable until pruned. Serving a directory straight from
+// `tailscale serve` needs root, so a user service serves it on loopback and
+// tailscale proxies to that.
 const FEED_DIR = process.env.HAPPY_APK_FEED_DIR || join(homedir(), '.local/share/happy-apk');
 const FEED_PATH = '/happy-apk';
 const FEED_KEEP = 5;
+const FEED_PORT = 8798;
+const FEED_UNIT = 'happy-apk-feed.service';
 // Hard limits for the local build's cgroup. Peak RSS of a cold build is
 // roughly 8-10 GB (Gradle 5 GB heap, Metro, R8); above MemoryHigh the kernel
 // reclaims from the build first, at MemoryMax only the build is killed.
@@ -236,10 +241,37 @@ function publish() {
     writeFileSync(join(FEED_DIR, 'index.html'),
         `<!doctype html><title>Happy preview</title>\n<a href="${apkName}">${apkName}</a>\n`);
 
+    ensureFeedServer();
+    const proxy = `http://127.0.0.1:${FEED_PORT}`;
     const serve = JSON.parse(run('tailscale', ['serve', 'status', '--json']) || '{}');
-    const served = Object.values(serve.Web ?? {}).some((host) => host.Handlers?.[FEED_PATH]?.Path === FEED_DIR);
-    if (!served) execFileSync('tailscale', ['serve', '--bg', '--set-path', FEED_PATH, FEED_DIR], { stdio: 'inherit' });
+    const served = Object.values(serve.Web ?? {}).some((host) => host.Handlers?.[FEED_PATH]?.Proxy === proxy);
+    if (!served) execFileSync('tailscale', ['serve', '--bg', '--set-path', FEED_PATH, proxy], { stdio: 'inherit' });
 
     const host = JSON.parse(run('tailscale', ['status', '--json'])).Self.DNSName.replace(/\.$/, '');
     return `https://${host}${FEED_PATH}/${apkName}`;
+}
+
+// Installs and starts the loopback file server behind the feed (a user unit,
+// so it comes back after a reboot like the persisted `tailscale serve`).
+function ensureFeedServer() {
+    const unitPath = join(homedir(), '.config/systemd/user', FEED_UNIT);
+    const unit = `[Unit]
+Description=Happy preview APK feed (proxied by tailscale serve at ${FEED_PATH})
+
+[Service]
+ExecStart=/usr/bin/env python3 -m http.server ${FEED_PORT} --bind 127.0.0.1 --directory ${FEED_DIR}
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+`;
+    if (!existsSync(unitPath) || readFileSync(unitPath, 'utf8') !== unit) {
+        mkdirSync(join(homedir(), '.config/systemd/user'), { recursive: true });
+        writeFileSync(unitPath, unit);
+        execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'inherit' });
+        execFileSync('systemctl', ['--user', 'enable', FEED_UNIT], { stdio: 'inherit' });
+        execFileSync('systemctl', ['--user', 'restart', FEED_UNIT], { stdio: 'inherit' });
+        return;
+    }
+    execFileSync('systemctl', ['--user', 'enable', '--now', FEED_UNIT], { stdio: 'inherit' });
 }
