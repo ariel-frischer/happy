@@ -387,6 +387,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingRight: 0,
         gap: 4,
     },
+    // omp's reported effort is a label, not a menu trigger: it sizes to its text.
+    mobileEffortReadOnly: {
+        width: undefined,
+        minWidth: MOBILE_COMPOSER_METRICS.effortWidth,
+    },
     mobileModeText: {
         flexShrink: 1,
         minWidth: 0,
@@ -838,6 +843,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const isCodex = !isRig && (props.metadata?.flavor === 'codex' || props.agentType === 'codex');
     const isGemini = props.metadata?.flavor === 'gemini' || props.agentType === 'gemini';
     const isOpenClaw = props.metadata?.flavor === 'openclaw' || props.agentType === 'openclaw';
+    // omp reports the model and effort it runs; the app shows them read-only.
+    const isOmp = props.metadata?.flavor === 'omp';
     const displayPermissionMode = React.useMemo(() => (
         props.permissionMode ? hackMode(props.permissionMode) : null
     ), [props.permissionMode]);
@@ -1380,10 +1387,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const effortSettingsGroup = modelSettingsGroups.find((group) => group.key === 'effort');
 
     const renderModelValue = () => (
-        <Text style={styles.mobileModeText} numberOfLines={1}>
-            {modelLabel}
-        </Text>
+        <>
+            {isOmp && <Ionicons name="hardware-chip-outline" size={14} color={theme.colors.textSecondary} />}
+            <Text style={styles.mobileModeText} numberOfLines={1}>
+                {modelLabel}
+            </Text>
+        </>
     );
+
+    // No menu to open (omp sets effort in its TUI), but the level is still worth showing.
+    const readOnlyEffortLabel = isOmp && !effortSettingsGroup ? effortLabel : undefined;
 
     const renderEffortValue = () => (
         <Text style={styles.mobileModeText} numberOfLines={1}>
@@ -2258,7 +2271,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         hitSlop={6}
                                         style={(p) => [
                                             styles.mobileModeButton,
-                                            { opacity: p.pressed && canOpenModelPicker ? 0.7 : canOpenModelPicker ? 1 : 0.58 },
+                                            { opacity: p.pressed && canOpenModelPicker ? 0.7 : canOpenModelPicker || isOmp ? 1 : 0.58 },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel={t('agentInput.model.title')}
@@ -2303,6 +2316,22 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             {renderEffortValue()}
                                         </BubblePressable>
                                     )
+                                )}
+
+                                {!!readOnlyEffortLabel && (
+                                    <>
+                                        <Text style={styles.mobileModeSeparator}>·</Text>
+                                        <View
+                                            style={[styles.mobileEffortButton, styles.mobileEffortReadOnly]}
+                                            accessible
+                                            accessibilityLabel={`${t('agentInput.effort.title')}: ${readOnlyEffortLabel}`}
+                                        >
+                                            <Ionicons name="bulb-outline" size={14} color={theme.colors.textSecondary} />
+                                            <Text style={styles.mobileModeText} numberOfLines={1}>
+                                                {readOnlyEffortLabel}
+                                            </Text>
+                                        </View>
+                                    </>
                                 )}
                             </>
                         ) : <View style={{ flex: 1 }} />}

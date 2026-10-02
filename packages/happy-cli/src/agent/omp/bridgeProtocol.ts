@@ -17,6 +17,21 @@ const OmpSessionInfoSchema = z.object({
 });
 export type OmpSessionInfo = z.infer<typeof OmpSessionInfoSchema>;
 
+/**
+ * omp's current model and thinking level. Sent after `hello`/`session`, at
+ * turn start, and whenever either changes; absent fields mean omp reports none.
+ * A new message type rather than new `hello` fields: older bridges drop
+ * unknown lines, so no protocol version bump is needed.
+ */
+const ConfigEventSchema = z.object({
+  t: z.literal('config'),
+  /** `code` is `provider/id`; `name` a short display name. */
+  model: z.object({ code: z.string(), name: z.string() }).optional(),
+  /** omp ThinkingLevel (off, minimal, low, medium, high, xhigh, max). */
+  thinkingLevel: z.string().optional(),
+});
+export type OmpConfig = Omit<z.infer<typeof ConfigEventSchema>, 't'>;
+
 /** One question of omp's `ask` dialog (omp's ExtensionAskDialogQuestion, minus previews). */
 const OmpAskQuestionSchema = z.object({
   id: z.string(),
@@ -139,6 +154,7 @@ export const ExtToBridgeSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('jobs'), jobs: z.array(OmpJobSchema) }),
   /** A background job ended; `output` is its result or error text, already capped. */
   z.object({ t: z.literal('job_end'), job: OmpJobSchema, output: z.string().optional() }),
+  ConfigEventSchema,
 ]);
 export type ExtToBridge = z.infer<typeof ExtToBridgeSchema>;
 

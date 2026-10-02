@@ -14,7 +14,8 @@ import { readCredentials, readSettings } from '@/persistence';
 import { logger } from '@/ui/logger';
 import { connectionState } from '@/utils/serverConnectionErrors';
 import { detectImageMime, extensionForImageMime, readImageSize } from '@/utils/imageFormat';
-import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpHistoryEvent, type OmpImage, type OmpSessionInfo } from './bridgeProtocol';
+import { OMP_BRIDGE_PROTOCOL_VERSION, parseExtToBridgeLine, type BridgeToExt, type ExtToBridge, type OmpAskQuestion, type OmpConfig, type OmpHistoryEvent, type OmpImage, type OmpSessionInfo } from './bridgeProtocol';
+import { ompConfigMetadata } from './ompConfigMetadata';
 import { OmpBridgeMapper } from './OmpBridgeMapper';
 import { formAnswersToOmpAsk, ompAskToForm, ompAskToFormAnswers } from './ompAskForm';
 import { readOmpMirror, writeOmpMirror } from './ompMirrorStore';
@@ -101,6 +102,8 @@ export async function runOmpBridge(): Promise<void> {
   let current: Mirror | null = null;
   /** From `hello`; null until the extension has introduced itself. */
   let ompPid: number | null = null;
+  /** omp's model and thinking level as last reported; carried into every mirror. */
+  let config: OmpConfig = {};
 
   const closeMirror = async (mirror: Mirror, reason: string) => {
     if (mirror.closed) return;
@@ -180,7 +183,7 @@ export async function runOmpBridge(): Promise<void> {
       sandbox: settings.sandboxConfig,
       // hostPid is the omp TUI: the daemon matches tmux-spawned sessions by
       // pane pid and stops sessions by signalling this pid.
-      metadataOverrides: { path: info.cwd, hostPid, slashCommands: APP_SLASH_COMMANDS, ...titleMetadata(info.title) },
+      metadataOverrides: { path: info.cwd, hostPid, slashCommands: APP_SLASH_COMMANDS, ...titleMetadata(info.title), ...ompConfigMetadata(config) },
       logPrefix: LOG,
       ...(previous ? { reopen: { tag: previous.tag, encryption: previous.encryption } } : {}),
       onSessionSwap: (session) => {
@@ -362,6 +365,12 @@ export async function runOmpBridge(): Promise<void> {
       case 'title': {
         const title = event.title;
         current?.session.updateMetadata((metadata) => ({ ...metadata, ...titleMetadata(title) }));
+        return;
+      }
+      case 'config': {
+        const { t: _, ...next } = event;
+        config = next;
+        current?.session.updateMetadata((metadata) => ({ ...metadata, ...ompConfigMetadata(next) }));
         return;
       }
       case 'user':
