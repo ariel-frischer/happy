@@ -55,7 +55,8 @@
     "pkgroll": "^2.14.2",
     "release-it": "^19.0.6",
     "tsx": "^4.20.6",
-    "typescript": "5.9.3",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^3.2.4"
   },
   "publishConfig": {

@@ -47,7 +47,8 @@
     "dotenv-cli": "^8.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
-    "typescript": "5.9.3",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.0",
     "yaml": "^2.4.2"

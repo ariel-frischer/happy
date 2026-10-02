@@ -59,6 +59,8 @@ cd happy
 pnpm install
 ```
 
+TypeScript: every package's `tsc` is TypeScript 7 (native, `@typescript/native` alias). The `typescript` package name is aliased to `@typescript/typescript6` because TS 7 has no compiler API yet; pkgroll `.d.ts` emit, ts-node, and specs that `import 'typescript'` use it. Keep both versions in step across packages.
+
 ### Happy App (Mobile + Web)
 
 ```bash

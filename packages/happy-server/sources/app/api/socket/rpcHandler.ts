@@ -1,7 +1,6 @@
 import { log } from "@/utils/log";
 import { Server, Socket } from "socket.io";
-import type { RemoteSocket } from "socket.io";
-import type { DefaultEventsMap } from "socket.io/dist/typed-events";
+import type { DefaultEventsMap, RemoteSocket } from "socket.io";
 import { Counter, Histogram, register } from 'prom-client';
 
 // RPC routing uses Socket.IO rooms. A daemon registering method M for user U
