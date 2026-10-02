@@ -26,11 +26,19 @@ shipped fixes off every preview phone for hours. Git looked fine the whole time.
 
 ## Phone test APKs
 
-Build APKs for Ariel's phone on GitLab CI with `pnpm apk:phone`, never with a
-local Gradle build or an emulator: the laptop's CPU cannot spare it. The command
-pushes the branch to the `gitlab` remote, runs the `android-apk` job, and sends
-the Drive link through ntfy. See `docs/phone-apk-ci.md`. A test APK is not a
-release; the release skill still governs EAS builds and OTA updates.
+GitLab CI builds are paused (since 2026-10-01, Ariel's call): build APKs for
+Ariel's phone locally, and only when the CPU is not busy (1-minute load
+average below half of `nproc`; otherwise wait and recheck). Build the same
+`preview` variant as the `android-apk` job in `.gitlab-ci.yml` (JDK 17 via
+`mise where java@temurin-17…`, `APP_ENV=preview HAPPY_DISABLE_OTA=1`,
+`assembleRelease -PreactNativeArchitectures=arm64-v8a`, `nice -n 10`, at most 4
+workers) from a clean detached worktree of the commit. Run Gradle detached
+(`setsid nohup … > build.log`): a cold build outlives a 300-second tool call.
+Then upload it with `gog drive upload` and send the Drive link through ntfy
+(`~/.omp/agent/ntfy-push.json`), as `scripts/phone-apk.mjs` does. Never use an
+emulator. When GitLab builds resume, `pnpm apk:phone` is the path again; see
+`docs/phone-apk-ci.md`. A test APK is not a release; the release skill still
+governs EAS builds and OTA updates.
 
 ## Sync To Main
 
