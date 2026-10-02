@@ -23,19 +23,19 @@ always has a higher number. The app shows it in Settings next to the version
 
 Without `--no-send`, the script copies the APK into `~/.local/share/happy-apk`
 (override with `HAPPY_APK_FEED_DIR`), keeps the newest five, rewrites its
-`index.html` to link only the newest one, and publishes the directory on the
-tailnet at `/happy-apk` (HTTPS, tailnet only). Serving a directory directly
-with `tailscale serve` needs root, so the script installs a user service,
-`happy-apk-feed.service` (`python3 -m http.server` on 127.0.0.1:8798), and
-points `tailscale serve --set-path /happy-apk` at it; both persist across
-reboots. It then sends an ntfy message whose
+`index.html` to link only the newest one, and serves the directory at
+`http://<tailnet IP>:8798/` through a user service, `happy-apk-feed.service`
+(`python3 -m http.server` bound to the tailnet address only, so it is not
+exposed on other networks; it persists across reboots and retries until
+tailscale is up). This is the same plain-HTTP tailnet link handup uses; the
+`ts.net` HTTPS name did not open on the phone. It then sends an ntfy message whose
 tap opens the APK link directly.
 
 [Obtainium](https://github.com/ImranR98/Obtainium) on the phone watches that
 page, so a new build is one tap ("Update") instead of download, open,
 install-without-scanning and fingerprint. One-time setup in Obtainium:
 
-1. Add app, URL `https://ari.taile4560a.ts.net/happy-apk/` (source: HTML).
+1. Add app, URL `http://100.81.57.89:8798/` (this laptop's tailnet IP; source: HTML).
 2. Optional, to show the build number as the version: Version Extraction
    `happy-preview-(\d+)-`, Match Group `1`, and turn Version Detection off
    (the app's own version name stays `1.8.0`).
