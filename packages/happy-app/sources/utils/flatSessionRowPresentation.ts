@@ -48,3 +48,28 @@ export function resolveFlatSessionRowPresentation({
 
     return { shimmerTitle: false, topRight: { type: 'timestamp' } };
 }
+
+export type SessionAvatarDot = { color: string; isPulsing: boolean } | null;
+
+/**
+ * Whether the agent is running, read at a glance from a dot on the avatar:
+ * working, needs you, running and idle, or exited/offline. Archived rows are
+ * retired work and carry none.
+ */
+export function resolveSessionAvatarDot({
+    state,
+    machineOffline,
+    archived,
+}: {
+    state: SessionState;
+    machineOffline: boolean;
+    archived: boolean;
+}): SessionAvatarDot {
+    if (archived) return null;
+    if (machineOffline || state === 'disconnected') return { color: '#999', isPulsing: false };
+    if (state === 'permission_required' || state === 'input_required') {
+        return { color: SESSION_BLOCKED_DOT_COLOR, isPulsing: true };
+    }
+    if (state === 'thinking') return { color: '#007AFF', isPulsing: true };
+    return { color: '#34C759', isPulsing: false };
+}

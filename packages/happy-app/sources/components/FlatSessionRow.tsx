@@ -17,7 +17,7 @@ import type { Theme } from '@/theme';
 import { t } from '@/text';
 import { RigGitLineChanges } from './RigGitLineChanges';
 import { ShimmerText } from './ShimmerText';
-import { resolveFlatSessionRowPresentation } from '@/utils/flatSessionRowPresentation';
+import { resolveFlatSessionRowPresentation, resolveSessionAvatarDot } from '@/utils/flatSessionRowPresentation';
 
 // Roughly three quarters of the row, the proportion a chat list uses: the row
 // is 10 + 61 + 10, so 60 leaves an even 10 either side of the avatar.
@@ -27,6 +27,7 @@ const AVATAR_GAP = 12;
 const TOP_RIGHT_DOT_SIZE = 20;
 const TOP_RIGHT_SLOT_MIN_WIDTH = 56;
 const UNREAD_DOT_CLEAR_GRACE_MS = 350;
+const AVATAR_STATUS_DOT_SIZE = 14;
 
 /**
  * The single colour the flat list paints, rows and page alike, so nothing reads
@@ -87,6 +88,11 @@ export const FlatSessionRow = React.memo(({ row, selected, showBorder, archived 
         hasUnread: showUnreadDot,
         faded,
     });
+    const avatarDot = resolveSessionAvatarDot({
+        state: session.state,
+        machineOffline: session.machineOffline,
+        archived: !!archived,
+    });
     const topRightAccessibilityLabel = presentation.topRight.type === 'dot'
         ? session.state === 'input_required'
             ? t('status.inputRequired')
@@ -146,6 +152,11 @@ export const FlatSessionRow = React.memo(({ row, selected, showBorder, archived 
                     thumbhash={session.avatarThumbhash}
                     badgeLocation="sessionList"
                 />
+                {avatarDot && (
+                    <View style={styles.avatarStatusDot} pointerEvents="none">
+                        <StatusDot color={avatarDot.color} isPulsing={avatarDot.isPulsing} size={AVATAR_STATUS_DOT_SIZE} />
+                    </View>
+                )}
             </View>
 
             <View style={[styles.content, faded && styles.contentFaded]}>
@@ -301,6 +312,16 @@ const stylesheet = StyleSheet.create((theme) => ({
     // pulled back, so the list stays one column rather than two designs.
     avatarFaded: {
         opacity: 0.5,
+    },
+    // Presence sits bottom-left: the harness badge already owns bottom-right.
+    // The ring in the row colour separates the dot from the picture.
+    avatarStatusDot: {
+        position: 'absolute',
+        left: 0,
+        bottom: 0,
+        padding: 2,
+        borderRadius: AVATAR_STATUS_DOT_SIZE,
+        backgroundColor: flatListBackgroundColor(theme),
     },
     contentFaded: {
         opacity: 0.6,
