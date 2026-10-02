@@ -27,7 +27,7 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { getCurrentVoiceConversationId, getCurrentVoiceSessionDurationSeconds, startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
-import { sessionAbort, sessionCancelCommunication, sessionGoalAction, sessionSetAgentModes, spawnSideChat, sessionKill, sessionArchive } from '@/sync/ops';
+import { sessionAbort, sessionCancelCommunication, sessionGoalAction, sessionSetAgentModes, sessionSetOmpThinkingLevel, spawnSideChat, sessionKill, sessionArchive } from '@/sync/ops';
 import { dismissPendingChat, getPendingChat, setPendingChatDraft, submitPendingChat, usePendingChat, type PendingChat } from '@/sync/pendingChats';
 import { claimComposerFocus } from '@/utils/composerFocus';
 import { storage, useIsDataReady, useLocalSetting, useRealtimeStatus, useSessionGitStatus, useSessionMessages, useSessionPendingCommunications, useSessionAvatar, useSessionUsage, useSetting, useSideChatSessions } from '@/sync/storage';
@@ -950,8 +950,16 @@ export function SessionViewLoaded({
     }, [sessionId, flavor, session]);
 
     const updateEffortLevel = React.useCallback((level: EffortLevel) => {
-        if (sessionId) sessionSetAgentModes(sessionId, { effortLevel: level.key });
-    }, [sessionId]);
+        if (!sessionId) return;
+        if (flavor === 'omp') {
+            sessionSetOmpThinkingLevel(sessionId, level.key).catch((error) => {
+                console.error('Failed to set the omp thinking level:', error);
+                Modal.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+            });
+            return;
+        }
+        sessionSetAgentModes(sessionId, { effortLevel: level.key });
+    }, [sessionId, flavor]);
 
     // Memoize header-dependent styles to prevent re-renders
     const headerDependentStyles = React.useMemo(() => ({

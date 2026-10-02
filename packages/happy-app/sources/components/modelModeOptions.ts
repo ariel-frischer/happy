@@ -632,8 +632,8 @@ export function getEffortLevelsForModel(
     if (flavor === 'agy') {
         return getAgyEffortLevels(modelKey);
     }
-    // omp reports its thinking levels (the interactive bridge: just the current
-    // one); the app shows them but cannot set them.
+    // omp reports the thinking levels its current model accepts (older bridges:
+    // just the current one); picks go to omp through its bridge.
     if (flavor === 'omp') {
         return mapMetadataOptions(metadata?.thoughtLevels);
     }
